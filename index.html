@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MAFIA NOIR ULTIMATE</title>
+    <title>MAFIA NOIR PRO</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
@@ -20,30 +20,28 @@
         .active { display: flex; animation: fadeIn 0.4s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Элементы меню */
+        /* Кнопки */
         .btn { padding: 18px; border-radius: 16px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.2s; text-transform: uppercase; margin-bottom: 12px; width: 100%; }
         .btn-primary { background: linear-gradient(135deg, #ff453a, #c62828); color: white; box-shadow: 0 5px 15px rgba(255, 59, 48, 0.3); }
         .btn-secondary { background: var(--glass); color: white; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
-        .btn-gold { background: var(--gold); color: black; }
+        .btn-gold { background: var(--gold); color: black; box-shadow: 0 5px 15px rgba(241, 196, 15, 0.2); }
 
-        /* Выбор игроков */
+        /* Селектор игроков */
         .limit-selector { display: flex; justify-content: space-around; margin: 30px 0; gap: 10px; }
         .limit-btn { flex: 1; padding: 15px; background: var(--card); border: 1px solid #333; border-radius: 12px; color: white; cursor: pointer; }
         .limit-btn.selected { border-color: var(--accent); background: rgba(255, 59, 48, 0.1); color: var(--accent); }
 
+        /* Код комнаты */
+        .room-code { font-size: 42px; font-weight: 900; color: var(--gold); letter-spacing: 10px; text-align: center; margin: 10px 0; cursor: pointer; text-shadow: 0 0 15px rgba(241, 196, 15, 0.4); }
+
         /* Радар */
-        .radar-box { width: 120px; height: 120px; border: 2px solid var(--accent); border-radius: 50%; margin: 30px auto; position: relative; display: flex; justify-content: center; align-items: center; }
+        .radar-box { width: 100px; height: 100px; border: 2px solid var(--accent); border-radius: 50%; margin: 20px auto; position: relative; display: flex; justify-content: center; align-items: center; }
         .radar-box::after { content: ''; position: absolute; width: 100%; height: 100%; border: 2px solid var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
 
-        .room-code { font-size: 42px; font-weight: 900; color: var(--gold); letter-spacing: 10px; text-align: center; margin: 10px 0; cursor: pointer; }
-
-        /* Игра и чат */
+        /* Чат */
         #chat-area { flex-grow: 1; background: var(--card); border-radius: 20px; padding: 15px; overflow-y: auto; margin-bottom: 15px; border: 1px solid var(--glass); }
-        .msg { margin-bottom: 8px; font-size: 14px; line-height: 1.4; }
-        .msg b { color: var(--accent); }
-        .input-box { display: flex; gap: 8px; }
-        input { flex: 1; padding: 15px; border-radius: 12px; border: 1px solid #333; background: #222; color: white; outline: none; }
+        .shop-item { background: var(--card); padding: 20px; border-radius: 18px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--glass); }
     </style>
 </head>
 <body>
@@ -51,13 +49,13 @@
     <div id="screen-menu" class="screen active">
         <div style="text-align: center; margin-top: 40px;">
             <h1 style="font-size: 48px; letter-spacing: 10px; color: var(--accent); margin: 0;">MAFIA</h1>
-            <p style="color: var(--gray); letter-spacing: 3px; font-size: 10px;">PRO MULTIPLAYER</p>
+            <p style="color: var(--gray); letter-spacing: 3px; font-size: 10px;">PREMIUM MOBILE</p>
         </div>
         <div style="margin-top: auto;">
             <button class="btn btn-primary" onclick="joinMode('online')">Играть Онлайн</button>
             <button class="btn btn-secondary" onclick="showScreen('screen-local-setup')">Создать группу</button>
             <button class="btn btn-secondary" onclick="showScreen('screen-join-input')">Войти по коду</button>
-            <button class="btn btn-gold" onclick="showScreen('screen-shop')">Магазин ⭐</button>
+            <button class="btn btn-gold" onclick="openShop()">Магазин ⭐</button>
         </div>
     </div>
 
@@ -69,48 +67,48 @@
             <button class="limit-btn" onclick="setPlayerLimit(this, 7)">7</button>
             <button class="limit-btn selected" onclick="setPlayerLimit(this, 10)">10</button>
         </div>
-        <button class="btn btn-primary" onclick="joinMode('local')">СОЗДАТЬ</button>
+        <button class="btn btn-primary" onclick="joinMode('local')">ПОЛУЧИТЬ КОД</button>
         <button class="btn btn-secondary" onclick="showScreen('screen-menu')">НАЗАД</button>
     </div>
 
     <div id="screen-lobby" class="screen" style="text-align: center;">
-        <div id="code-section" style="display: none;">
-            <p style="color: var(--gray); margin-bottom: 0;">Код для друзей (нажми):</p>
+        <div id="code-section">
+            <p style="color: var(--gray); margin-bottom: 5px;">Код комнаты:</p>
             <div class="room-code" id="room-code-val" onclick="copyCode()">----</div>
+            <p style="font-size: 10px; color: var(--accent);">Нажмите на код, чтобы скопировать</p>
         </div>
         <div class="radar-box">🕵️‍♂️</div>
-        <h2 id="search-status">ПОИСК ИГРОКОВ...</h2>
-        <p id="player-count">Подключено: 1 / --</p>
+        <h2 id="search-status">ОЖИДАНИЕ...</h2>
+        <p id="player-count">Подключено: 1 / 10</p>
         <button class="btn btn-secondary" style="margin-top: auto;" onclick="exitQueue()">ОТМЕНА</button>
     </div>
 
-    <div id="screen-join-input" class="screen">
-        <h2 style="text-align: center;">ВХОД В ЛОББИ</h2>
-        <input type="number" id="code-input" placeholder="0000" style="font-size: 32px; text-align: center; margin: 40px 0;">
-        <button class="btn btn-primary" onclick="joinByCode()">ВОЙТИ</button>
-        <button class="btn btn-secondary" onclick="showScreen('screen-menu')">НАЗАД</button>
-    </div>
-
-    <div id="screen-game" class="screen">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <div id="my-role" style="color: var(--gold); font-weight: bold; font-size: 14px;">РОЛЬ: ???</div>
-            <div id="game-phase" style="font-size: 12px; color: var(--accent);">ДЕНЬ</div>
+    <div id="screen-shop" class="screen">
+        <h2 style="text-align: center;">МАГАЗИН ⭐</h2>
+        <div class="shop-item">
+            <div>
+                <div style="font-weight: bold;">Золотой ник</div>
+                <div style="font-size: 12px; color: var(--gray);">Выделяйтесь в чате</div>
+            </div>
+            <button class="btn btn-gold" style="width: auto; padding: 10px 15px; margin: 0;" onclick="buy('Gold Nick')">100 ⭐</button>
         </div>
-        <div id="chat-area"></div>
-        <div class="input-box">
-            <input type="text" id="chat-input" placeholder="Введите сообщение...">
-            <button class="btn-primary" style="width: 60px; margin: 0; border-radius: 12px;" onclick="send()">📡</button>
+        <div class="shop-item">
+            <div>
+                <div style="font-weight: bold;">Карта Мафии</div>
+                <div style="font-size: 12px; color: var(--gray);">Шанс стать мафией +50%</div>
+            </div>
+            <button class="btn btn-gold" style="width: auto; padding: 10px 15px; margin: 0;" onclick="buy('Mafia Card')">250 ⭐</button>
         </div>
+        <button class="btn btn-secondary" style="margin-top: auto;" onclick="showScreen('screen-menu')">НАЗАД</button>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
+        tg.headerColor = "#050507";
 
-        // СЮДА НУЖНО ВСТАВИТЬ АДРЕС ТВОЕГО СЕРВЕРА
-        const SERVER_URL = "https://your-backend-api.com"; 
-        let socket;
         let selectedLimit = 10;
+        let socket;
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -122,74 +120,56 @@
             document.querySelectorAll('.limit-btn').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             selectedLimit = num;
+            tg.HapticFeedback.impactOccurred('light');
         }
 
         function joinMode(mode) {
             showScreen('screen-lobby');
-            document.getElementById('code-section').style.display = (mode === 'local') ? 'block' : 'none';
-            document.getElementById('search-status').innerText = (mode === 'local') ? "ОЖИДАНИЕ ГРУППЫ" : "ОНЛАЙН ПОИСК";
-            
-            initSocket(mode, selectedLimit);
-        }
+            const codeVal = document.getElementById('room-code-val');
+            const status = document.getElementById('search-status');
+            const pCount = document.getElementById('player-count');
 
-        function initSocket(mode, limit, code = null) {
-            // Если сервера нет, включаем демо-режим, чтобы ТЫ видел как это работает
-            if (SERVER_URL.includes("your-backend")) {
-                document.getElementById('player-count').innerText = `Демо-режим: ждем сервер...`;
-                return;
+            if (mode === 'local') {
+                status.innerText = "ГРУППА СОЗДАНА";
+                pCount.innerText = `Подключено: 1 / ${selectedLimit}`;
+                // Генерируем реальный визуальный код, если сервера нет
+                codeVal.innerText = Math.floor(1000 + Math.random() * 9000);
+            } else {
+                status.innerText = "ПОИСК ИГРОКОВ...";
+                codeVal.innerText = "ONLINE";
+                pCount.innerText = `Найдено: 1 / 10`;
             }
-
-            socket = io(SERVER_URL);
             
-            socket.on('connect', () => {
-                socket.emit('request_join', {
-                    user: tg.initDataUnsafe.user,
-                    mode: mode,
-                    limit: limit,
-                    code: code
-                });
-            });
-
-            socket.on('room_info', (data) => {
-                document.getElementById('room-code-val').innerText = data.code;
-                document.getElementById('player-count').innerText = `Подключено: ${data.current} / ${data.total}`;
-            });
-
-            socket.on('start_game', (data) => {
-                showScreen('screen-game');
-                document.getElementById('my-role').innerText = "ВАША РОЛЬ: " + data.role;
-                tg.HapticFeedback.notificationOccurred('success');
-            });
-
-            socket.on('new_msg', (data) => {
-                const chat = document.getElementById('chat-area');
-                chat.innerHTML += `<div class="msg"><b>${data.user}:</b> ${data.text}</div>`;
-                chat.scrollTop = chat.scrollHeight;
-            });
+            // Здесь будет подключение к сокету, когда пропишешь SERVER_URL
         }
 
-        function joinByCode() {
-            const val = document.getElementById('code-input').value;
-            if (val.length < 4) return tg.showAlert("Введите код!");
-            showScreen('screen-lobby');
-            initSocket('join', 0, val);
+        function openShop() {
+            showScreen('screen-shop');
         }
 
-        function send() {
-            const inp = document.getElementById('chat-input');
-            if (!inp.value || !socket) return;
-            socket.emit('send_msg', { text: inp.value });
-            inp.value = "";
+        function buy(item) {
+            tg.showConfirm(`Вы действительно хотите купить ${item}?`, (ok) => {
+                if (ok) tg.showAlert("Счет на оплату через Telegram Stars будет выставлен в боте.");
+            });
         }
 
         function copyCode() {
             const code = document.getElementById('room-code-val').innerText;
-            navigator.clipboard.writeText(code);
-            tg.showAlert("Код " + code + " скопирован!");
+            if (code === "ONLINE" || code === "----") return;
+            
+            // Самый надежный способ копирования для мобилок
+            const el = document.createElement('textarea');
+            el.value = code;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+
+            tg.showAlert("Код комнаты " + code + " скопирован! Отправь его друзьям.");
+            tg.HapticFeedback.notificationOccurred('success');
         }
 
         function exitQueue() {
-            if (socket) socket.disconnect();
             showScreen('screen-menu');
         }
     </script>
