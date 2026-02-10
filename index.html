@@ -2,44 +2,96 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; }
-        .game-container { padding: 20px; }
-        .player-card { background: #333; margin: 10px; padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; }
-        .role-badge { color: #ff4444; font-weight: bold; }
-        .btn-donate { background: #f1c40f; color: black; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .btn-action { background: #3498db; color: white; border: none; padding: 10px; width: 100%; margin-top: 20px; }
+        :root {
+            --bg-color: #0f0f13;
+            --accent-color: #e74c3c;
+            --card-bg: #1e1e24;
+            --text-main: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+        }
+
+        /* Главное меню */
+        .screen { display: none; height: 100vh; flex-direction: column; padding: 20px; box-sizing: border-box; }
+        .active { display: flex; }
+
+        .logo { margin-top: 50px; font-size: 42px; font-weight: 800; letter-spacing: 5px; color: var(--accent-color); text-shadow: 0 0 15px rgba(231, 76, 60, 0.5); }
+
+        .menu-buttons { margin-top: auto; margin-bottom: 50px; gap: 15px; display: flex; flex-direction: column; }
+
+        button {
+            padding: 16px; border-radius: 12px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s;
+        }
+
+        .btn-primary { background: var(--accent-color); color: white; box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3); }
+        .btn-secondary { background: var(--card-bg); color: white; border: 1px solid #333; }
+
+        /* Стили чата */
+        #chat-area { flex-grow: 1; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; margin: 10px 0; border: 1px solid #333; }
+        .msg { margin-bottom: 8px; font-size: 14px; }
+        .msg b { color: var(--accent-color); }
+
+        input#chat-input { background: #2c2c34; border: none; padding: 12px; border-radius: 8px; color: white; }
     </style>
 </head>
 <body>
-    <div class="game-container">
-        <h2 id="status">Город засыпает...</h2>
-        <div id="players">
-            <div class="player-card">
-                <span>Игрок 1 (Вы)</span>
-                <span class="role-badge">Мафия</span>
-            </div>
-        </div>
+
+    <div id="screen-menu" class="screen active">
+        <div class="logo">MAFIA</div>
+        <p>Город засыпает...</p>
         
-        <button class="btn-action" onclick="makeAction()">Сделать ход</button>
-        <hr>
-        <h3>Магазин бонусов</h3>
-        <button class="btn-donate" onclick="buyRole()">Купить роль Комиссара (100 Stars)</button>
+        <div class="menu-buttons">
+            <button class="btn-primary" onclick="showScreen('screen-game')">ОНЛАЙН ИГРА</button>
+            <button class="btn-secondary" onclick="tg.showAlert('Режим в разработке')">ЛОКАЛЬНО (С ДРУЗЬЯМИ)</button>
+            <button class="btn-secondary" style="color: #f1c40f;" onclick="showScreen('screen-shop')">МАГАЗИН ⭐</button>
+        </div>
+    </div>
+
+    <div id="screen-game" class="screen">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>Фаза: <span style="color: #3498db;">Обсуждение</span></h3>
+            <button onclick="showScreen('screen-menu')" style="padding: 5px 10px; font-size: 12px;">Выйти</button>
+        </div>
+
+        <div id="chat-area">
+            <div class="msg"><b>Система:</b> Игра началась. Ваша роль: Мирный житель.</div>
+            <div class="msg"><b>Дмитрий:</b> Я думаю, Мафия — это Игрок 3!</div>
+        </div>
+
+        <input type="text" id="chat-input" placeholder="Введите сообщение...">
+    </div>
+
+    <div id="screen-shop" class="screen">
+        <h2>Магазин</h2>
+        <div class="btn-secondary" style="padding: 20px; margin-bottom: 10px;">
+            <p>Золотой ник в чате</p>
+            <button class="btn-primary" onclick="pay()">Купить за 50 ⭐</button>
+        </div>
+        <button onclick="showScreen('screen-menu')">Назад</button>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Развернуть на весь экран
+        tg.expand();
+        tg.headerColor = "#0f0f13";
 
-        function buyRole() {
-            // Здесь будет логика вызова платежа
-            tg.showConfirm("Вы хотите купить смену роли за 100 Telegram Stars?");
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
         }
 
-        function makeAction() {
-            tg.showAlert("Вы выбрали цель для ночного визита!");
+        function pay() {
+            // В реальном приложении здесь вызывается бэкенд для создания счета
+            tg.showConfirm("Подтвердить покупку?");
         }
     </script>
 </body>
