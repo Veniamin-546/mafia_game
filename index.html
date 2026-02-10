@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mafia Ultimate TMA</title>
+    <title>Mafia Online Real-Time</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
@@ -14,7 +14,7 @@
             --gold: #f1c40f;
             --text: #ffffff;
             --gray: #8e8e93;
-            --success: #4cd964;
+            --night-color: #5856d6;
         }
 
         body {
@@ -23,227 +23,206 @@
             color: var(--text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             overflow: hidden;
-            -webkit-user-select: none;
         }
 
-        /* Общие стили экранов */
         .screen {
-            display: none;
-            height: 100vh;
-            flex-direction: column;
-            padding: 20px;
-            box-sizing: border-box;
-            animation: fadeIn 0.3s ease;
+            display: none; height: 100vh; flex-direction: column;
+            padding: 20px; box-sizing: border-box;
         }
-        .active { display: flex; }
+        .active { display: flex; animation: fadeIn 0.3s ease; }
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* --- ЭКРАН МЕНЮ --- */
-        #screen-menu { justify-content: space-between; align-items: center; padding: 60px 20px; }
-        .logo-box h1 { font-size: 56px; margin: 0; letter-spacing: 10px; color: var(--accent); text-shadow: 0 0 25px rgba(255, 59, 48, 0.5); }
-        .logo-box p { color: var(--gray); letter-spacing: 2px; font-size: 12px; }
+        /* --- MENU --- */
+        #screen-menu { justify-content: center; align-items: center; text-align: center; }
+        .logo h1 { font-size: 50px; margin: 0; letter-spacing: 8px; color: var(--accent); }
+        .menu-btns { width: 100%; max-width: 300px; display: grid; gap: 12px; margin-top: 40px; }
 
-        .menu-grid { width: 100%; max-width: 320px; display: grid; gap: 15px; }
-        
-        button {
-            padding: 18px; border-radius: 15px; border: none; font-size: 16px; font-weight: 700;
-            transition: 0.2s; cursor: pointer; text-transform: uppercase;
-        }
-        button:active { transform: scale(0.96); opacity: 0.8; }
-        
-        .btn-main { background: var(--accent); color: white; box-shadow: 0 4px 15px rgba(255, 59, 48, 0.3); }
-        .btn-dark { background: var(--card); color: white; border: 1px solid #2c2c2e; }
-        .btn-gold { background: var(--gold); color: black; }
-
-        /* --- ЭКРАН ЗАГРУЗКИ (РАДАР) --- */
+        /* --- LOADING (REAL SEARCH) --- */
         #screen-loading { justify-content: center; align-items: center; }
-        .radar-container {
-            width: 180px; height: 180px; border: 2px solid var(--accent);
-            border-radius: 50%; display: flex; justify-content: center; align-items: center;
-            position: relative; margin-bottom: 40px;
+        .radar {
+            width: 120px; height: 120px; border: 3px solid var(--accent);
+            border-radius: 50%; position: relative; margin-bottom: 30px;
+            display: flex; justify-content: center; align-items: center;
         }
-        .radar-container::before, .radar-container::after {
+        .radar::after {
             content: ''; position: absolute; width: 100%; height: 100%;
             border: 2px solid var(--accent); border-radius: 50%; animation: pulse 2s infinite;
         }
-        .radar-container::after { animation-delay: 1s; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.8); opacity: 0; } }
 
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 0.8; }
-            100% { transform: scale(1.6); opacity: 0; }
+        /* --- GAME --- */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .phase-badge { padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 12px; }
+        .day { background: var(--accent); color: white; }
+        .night { background: var(--night-color); color: white; }
+
+        #chat-area {
+            flex-grow: 1; background: var(--card); border-radius: 15px;
+            padding: 15px; overflow-y: auto; border: 1px solid #2c2c2e; margin-bottom: 15px;
         }
+        .message { margin-bottom: 10px; font-size: 14px; }
+        .message b { color: var(--accent); }
+        .sys-msg { color: var(--gold); text-align: center; font-size: 12px; margin: 10px 0; }
 
-        .status-text { font-size: 20px; font-weight: bold; margin-bottom: 10px; color: var(--accent); }
-        .player-count { color: var(--gray); font-size: 14px; }
-
-        /* --- ЭКРАН ИГРЫ --- */
-        .game-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .role-tag { padding: 5px 12px; background: var(--card); border-radius: 10px; font-size: 12px; border: 1px solid var(--accent); }
-        
-        #chat-box {
-            flex-grow: 1; background: var(--card); border-radius: 20px; padding: 15px;
-            overflow-y: auto; margin-bottom: 15px; border: 1px solid #2c2c2e;
-        }
-        .msg { margin-bottom: 12px; font-size: 14px; line-height: 1.4; animation: slideUp 0.2s ease; }
-        .msg b { color: var(--accent); margin-right: 5px; }
-        .msg.system { color: var(--gold); text-align: center; font-size: 12px; opacity: 0.8; }
-
-        @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-        .input-area { display: flex; gap: 10px; }
+        .input-bar { display: flex; gap: 10px; }
         input {
             flex-grow: 1; background: #24242b; border: 1px solid #3a3a42;
-            border-radius: 12px; padding: 14px; color: white; font-size: 16px; outline: none;
+            border-radius: 12px; padding: 12px; color: white; outline: none;
         }
 
-        /* --- МАГАЗИН --- */
-        .shop-card {
-            background: var(--card); padding: 20px; border-radius: 20px;
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 15px; border: 1px solid #2c2c2e;
+        button {
+            padding: 15px; border-radius: 12px; border: none; font-weight: bold;
+            cursor: pointer; transition: 0.2s;
+        }
+        button:active { transform: scale(0.95); }
+        .btn-red { background: var(--accent); color: white; }
+        .btn-gray { background: var(--card); color: white; border: 1px solid #333; }
+        .btn-gold { background: var(--gold); color: black; }
+
+        /* --- SHOP --- */
+        .shop-item {
+            background: var(--card); padding: 15px; border-radius: 15px;
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
 
     <div id="screen-menu" class="screen active">
-        <div class="logo-box">
+        <div class="logo">
             <h1>MAFIA</h1>
-            <p>WEB APP EDITION</p>
+            <p style="color: var(--gray)">ONLINE MULTIPLAYER</p>
         </div>
-        
-        <div class="menu-grid">
-            <button class="btn-main" onclick="startSearch()">ИГРАТЬ ОНЛАЙН</button>
-            <button class="btn-dark" onclick="tg.showAlert('Локальный режим будет доступен в следующем обновлении!')">ЛОКАЛЬНО</button>
+        <div class="menu-btns">
+            <button class="btn-red" onclick="connectToServer()">ИГРАТЬ ОНЛАЙН</button>
+            <button class="btn-gray" onclick="tg.showAlert('Режим с друзьями скоро!')">С ДРУЗЬЯМИ</button>
             <button class="btn-gold" onclick="showScreen('screen-shop')">МАГАЗИН ⭐</button>
         </div>
     </div>
 
     <div id="screen-loading" class="screen">
-        <div class="radar-container">
-            <span style="font-size: 40px;">🕵️‍♂️</span>
-        </div>
-        <div class="status-text" id="status-label">ПОИСК ИГРОКОВ</div>
-        <div class="player-count" id="count-label">Найдено: 1 / 10</div>
-        
-        <button class="btn-dark" style="margin-top: 60px; width: 200px;" onclick="cancelSearch()">ОТМЕНА</button>
+        <div class="radar">🕵️‍♂️</div>
+        <h2 id="loading-status">ПОИСК ИГРОКОВ...</h2>
+        <p id="player-count">Подключено: 1 / 10</p>
+        <button class="btn-gray" style="margin-top: 30px;" onclick="disconnect()">ОТМЕНА</button>
     </div>
 
     <div id="screen-game" class="screen">
-        <div class="game-header">
-            <div class="role-tag">РОЛЬ: <span id="my-role" style="color:var(--accent)">???</span></div>
-            <div style="font-size: 12px; color: var(--gray)">ДЕНЬ 1</div>
+        <div class="header">
+            <div id="phase-label" class="phase-badge day">ДЕНЬ: ОБСУЖДЕНИЕ</div>
+            <div id="my-role" style="font-size: 12px; color: var(--gold)">Роль: ???</div>
         </div>
-
-        <div id="chat-box">
-            <div class="msg system">Город засыпает, просыпается мафия...</div>
-        </div>
-
-        <div class="input-area">
-            <input type="text" id="chat-input" placeholder="Ваше сообщение...">
-            <button class="btn-main" style="padding: 14px;" onclick="handleSend()">📡</button>
+        <div id="chat-area"></div>
+        <div class="input-bar">
+            <input type="text" id="chat-input" placeholder="Введите сообщение...">
+            <button class="btn-red" onclick="sendMessage()">📡</button>
         </div>
     </div>
 
     <div id="screen-shop" class="screen">
-        <div class="game-header">
-            <h2 style="margin:0">МАГАЗИН</h2>
-            <button class="btn-dark" style="padding: 8px 15px;" onclick="showScreen('screen-menu')">✕</button>
+        <div class="header">
+            <h2>МАГАЗИН</h2>
+            <button class="btn-gray" onclick="showScreen('screen-menu')">✕</button>
         </div>
-        
-        <div class="shop-card">
-            <div>
-                <div style="font-weight: bold;">Золотой ник</div>
-                <div style="font-size: 12px; color: var(--gray);">Выделяйтесь среди всех</div>
-            </div>
-            <button class="btn-gold" style="padding: 10px 15px;" onclick="buyItem('gold_nick', 100)">100 ⭐</button>
+        <div class="shop-item">
+            <span>Золотой ник</span>
+            <button class="btn-gold" onclick="buyItem('gold', 100)">100 ⭐</button>
         </div>
-
-        <div class="shop-card">
-            <div>
-                <div style="font-weight: bold;">Выбор роли</div>
-                <div style="font-size: 12px; color: var(--gray);">Карта мафии на 1 игру</div>
-            </div>
-            <button class="btn-gold" style="padding: 10px 15px;" onclick="buyItem('mafia_card', 250)">250 ⭐</button>
+        <div class="shop-item">
+            <span>Роль Мафии (шанс+)</span>
+            <button class="btn-gold" onclick="buyItem('chance', 250)">250 ⭐</button>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        tg.headerColor = "#0a0a0c";
-        tg.backgroundColor = "#0a0a0c";
 
-        let searchTimer;
-        let count = 1;
+        // Сюда вставь URL своего сервера после деплоя
+        const SOCKET_URL = "https://your-backend-api.com"; 
+        let socket;
+        let myName = tg.initDataUnsafe?.user?.first_name || "Игрок";
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+        }
+
+        function connectToServer() {
+            showScreen('screen-loading');
+            
+            // Если сокет уже есть, не создаем новый
+            if (socket) socket.disconnect();
+
+            socket = io(SOCKET_URL, {
+                query: { name: myName, tgId: tg.initDataUnsafe?.user?.id }
+            });
+
+            // Когда кто-то заходит/выходит в очередь
+            socket.on('queue_update', (data) => {
+                document.getElementById('player-count').innerText = `Подключено: ${data.count} / 10`;
+            });
+
+            // Когда сервер собрал 10 человек и запустил матч
+            socket.on('game_start', (data) => {
+                showScreen('screen-game');
+                document.getElementById('my-role').innerText = "Роль: " + data.role;
+                addSystemMsg(`Игра началась! Вы — ${data.role}`);
+                tg.HapticFeedback.notificationOccurred('success');
+            });
+
+            // Получение сообщения в чате
+            socket.on('chat_message', (data) => {
+                appendMessage(data.user, data.text);
+            });
+
+            // Смена фазы (День/Ночь)
+            socket.on('change_phase', (data) => {
+                const label = document.getElementById('phase-label');
+                label.innerText = data.phase === 'night' ? "НОЧЬ: МАФИЯ ХОДИТ" : "ДЕНЬ: ОБСУЖДЕНИЕ";
+                label.className = `phase-badge ${data.phase}`;
+                addSystemMsg(data.phase === 'night' ? "Город засыпает..." : "Город просыпается!");
+            });
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            if (!input.value) return;
+
+            socket.emit('send_chat', { text: input.value });
+            appendMessage("Вы", input.value); // Локальное отображение
+            input.value = "";
             tg.HapticFeedback.impactOccurred('light');
         }
 
-        // Логика подбора
-        function startSearch() {
-            showScreen('screen-loading');
-            count = 1;
-            document.getElementById('count-label').innerText = `Найдено: ${count} / 10`;
-            document.getElementById('status-label').innerText = "ПОИСК ИГРОКОВ";
-
-            searchTimer = setInterval(() => {
-                count++;
-                document.getElementById('count-label').innerText = `Найдено: ${count} / 10`;
-                
-                if(count === 7) document.getElementById('status-label').innerText = "РАСПРЕДЕЛЕНИЕ РОЛЕЙ";
-                
-                if(count >= 10) {
-                    clearInterval(searchTimer);
-                    goToGame();
-                }
-            }, 1000);
+        function appendMessage(user, text) {
+            const chat = document.getElementById('chat-area');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message';
+            msgDiv.innerHTML = `<b>${user}:</b> ${text}`;
+            chat.appendChild(msgDiv);
+            chat.scrollTop = chat.scrollHeight;
         }
 
-        function cancelSearch() {
-            clearInterval(searchTimer);
+        function addSystemMsg(text) {
+            const chat = document.getElementById('chat-area');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'sys-msg';
+            msgDiv.innerText = text;
+            chat.appendChild(msgDiv);
+        }
+
+        function disconnect() {
+            if (socket) socket.disconnect();
             showScreen('screen-menu');
         }
 
-        function goToGame() {
-            tg.HapticFeedback.notificationOccurred('success');
-            showScreen('screen-game');
-            const roles = ['Мафия 🔪', 'Мирный 👤', 'Комиссар 🔎', 'Доктор 💊'];
-            const myRole = roles[Math.floor(Math.random() * roles.length)];
-            document.getElementById('my-role').innerText = myRole;
-            addMsg("Система", `Игра началась! Твоя роль: ${myRole}`);
-        }
-
-        // Логика чата
-        function handleSend() {
-            const inp = document.getElementById('chat-input');
-            if(!inp.value) return;
-            
-            const name = tg.initDataUnsafe.user?.first_name || "Игрок";
-            addMsg(name, inp.value);
-            inp.value = "";
-            tg.HapticFeedback.impactOccurred('light');
-        }
-
-        function addMsg(user, text) {
-            const box = document.getElementById('chat-box');
-            const div = document.createElement('div');
-            div.className = (user === "Система") ? "msg system" : "msg";
-            div.innerHTML = (user === "Система") ? text : `<b>${user}</b> ${text}`;
-            box.appendChild(div);
-            box.scrollTop = box.scrollHeight;
-        }
-
-        // Логика донатов
         function buyItem(id, price) {
-            tg.showConfirm(`Подтверждаете покупку за ${price} Stars?`, (ok) => {
-                if(ok) {
-                    tg.showAlert("Запрос отправлен боту. Ожидайте счет на оплату!");
-                    // Тут будет fetch('/create-invoice', {item: id})
+            tg.showConfirm(`Купить этот товар за ${price} Stars?`, (ok) => {
+                if (ok) {
+                    // Здесь будет запрос к боту для генерации Invoice
+                    tg.showAlert("Счет на оплату будет отправлен вам в личные сообщения ботом!");
                 }
             });
         }
