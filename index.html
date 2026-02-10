@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mafia Noir TMA</title>
+    <title>Mafia Ultimate TMA</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
@@ -11,9 +11,10 @@
             --bg: #0a0a0c;
             --card: #16161a;
             --accent: #ff3b30;
-            --gold: #ffcc00;
+            --gold: #f1c40f;
             --text: #ffffff;
             --gray: #8e8e93;
+            --success: #4cd964;
         }
 
         body {
@@ -22,190 +23,227 @@
             color: var(--text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             overflow: hidden;
+            -webkit-user-select: none;
         }
 
-        /* Контейнер экранов */
+        /* Общие стили экранов */
         .screen {
             display: none;
             height: 100vh;
             flex-direction: column;
             padding: 20px;
             box-sizing: border-box;
+            animation: fadeIn 0.3s ease;
         }
         .active { display: flex; }
 
-        /* Экраны */
-        #screen-menu { justify-content: center; align-items: center; text-align: center; }
-        
-        .logo-area { margin-bottom: 50px; }
-        .logo-area h1 { font-size: 48px; margin: 0; letter-spacing: 8px; color: var(--accent); text-shadow: 0 0 20px rgba(255, 59, 48, 0.4); }
-        .logo-area p { color: var(--gray); font-size: 14px; margin-top: 5px; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Кнопки */
-        .menu-grid { display: grid; gap: 12px; width: 100%; max-width: 300px; }
-        button {
-            padding: 16px; border-radius: 14px; border: none; font-size: 16px; font-weight: 600;
-            transition: transform 0.1s; cursor: pointer;
-        }
-        button:active { transform: scale(0.97); }
+        /* --- ЭКРАН МЕНЮ --- */
+        #screen-menu { justify-content: space-between; align-items: center; padding: 60px 20px; }
+        .logo-box h1 { font-size: 56px; margin: 0; letter-spacing: 10px; color: var(--accent); text-shadow: 0 0 25px rgba(255, 59, 48, 0.5); }
+        .logo-box p { color: var(--gray); letter-spacing: 2px; font-size: 12px; }
+
+        .menu-grid { width: 100%; max-width: 320px; display: grid; gap: 15px; }
         
-        .btn-main { background: var(--accent); color: white; }
+        button {
+            padding: 18px; border-radius: 15px; border: none; font-size: 16px; font-weight: 700;
+            transition: 0.2s; cursor: pointer; text-transform: uppercase;
+        }
+        button:active { transform: scale(0.96); opacity: 0.8; }
+        
+        .btn-main { background: var(--accent); color: white; box-shadow: 0 4px 15px rgba(255, 59, 48, 0.3); }
         .btn-dark { background: var(--card); color: white; border: 1px solid #2c2c2e; }
         .btn-gold { background: var(--gold); color: black; }
 
-        /* Чат и Игровое поле */
+        /* --- ЭКРАН ЗАГРУЗКИ (РАДАР) --- */
+        #screen-loading { justify-content: center; align-items: center; }
+        .radar-container {
+            width: 180px; height: 180px; border: 2px solid var(--accent);
+            border-radius: 50%; display: flex; justify-content: center; align-items: center;
+            position: relative; margin-bottom: 40px;
+        }
+        .radar-container::before, .radar-container::after {
+            content: ''; position: absolute; width: 100%; height: 100%;
+            border: 2px solid var(--accent); border-radius: 50%; animation: pulse 2s infinite;
+        }
+        .radar-container::after { animation-delay: 1s; }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            100% { transform: scale(1.6); opacity: 0; }
+        }
+
+        .status-text { font-size: 20px; font-weight: bold; margin-bottom: 10px; color: var(--accent); }
+        .player-count { color: var(--gray); font-size: 14px; }
+
+        /* --- ЭКРАН ИГРЫ --- */
         .game-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .phase-indicator { padding: 4px 12px; background: rgba(255,59,48,0.2); border-radius: 20px; color: var(--accent); font-size: 12px; }
-
+        .role-tag { padding: 5px 12px; background: var(--card); border-radius: 10px; font-size: 12px; border: 1px solid var(--accent); }
+        
         #chat-box {
-            flex-grow: 1;
-            background: var(--card);
-            border-radius: 16px;
-            padding: 15px;
-            overflow-y: auto;
-            margin-bottom: 15px;
-            border: 1px solid #2c2c2e;
+            flex-grow: 1; background: var(--card); border-radius: 20px; padding: 15px;
+            overflow-y: auto; margin-bottom: 15px; border: 1px solid #2c2c2e;
         }
-        .msg { margin-bottom: 10px; line-height: 1.4; font-size: 14px; animation: fadeIn 0.3s; }
-        .msg b { color: var(--accent); }
-        .msg.system { color: var(--gray); font-style: italic; text-align: center; }
+        .msg { margin-bottom: 12px; font-size: 14px; line-height: 1.4; animation: slideUp 0.2s ease; }
+        .msg b { color: var(--accent); margin-right: 5px; }
+        .msg.system { color: var(--gold); text-align: center; font-size: 12px; opacity: 0.8; }
 
-        .input-group { display: flex; gap: 8px; }
+        @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        .input-area { display: flex; gap: 10px; }
         input {
-            flex-grow: 1; background: var(--card); border: 1px solid #2c2c2e;
-            border-radius: 12px; padding: 12px; color: white; outline: none;
+            flex-grow: 1; background: #24242b; border: 1px solid #3a3a42;
+            border-radius: 12px; padding: 14px; color: white; font-size: 16px; outline: none;
         }
 
-        /* Магазин */
-        .shop-item {
-            background: var(--card); padding: 15px; border-radius: 16px;
-            display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+        /* --- МАГАЗИН --- */
+        .shop-card {
+            background: var(--card); padding: 20px; border-radius: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px; border: 1px solid #2c2c2e;
         }
-
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
     <div id="screen-menu" class="screen active">
-        <div class="logo-area">
+        <div class="logo-box">
             <h1>MAFIA</h1>
             <p>WEB APP EDITION</p>
         </div>
+        
         <div class="menu-grid">
-            <button class="btn-main" onclick="joinGame()">НАЙТИ ИГРУ</button>
-            <button class="btn-dark" onclick="tg.showAlert('Создайте группу с друзьями и запустите бота там!')">ИГРАТЬ С ДРУЗЬЯМИ</button>
+            <button class="btn-main" onclick="startSearch()">ИГРАТЬ ОНЛАЙН</button>
+            <button class="btn-dark" onclick="tg.showAlert('Локальный режим будет доступен в следующем обновлении!')">ЛОКАЛЬНО</button>
             <button class="btn-gold" onclick="showScreen('screen-shop')">МАГАЗИН ⭐</button>
         </div>
     </div>
 
+    <div id="screen-loading" class="screen">
+        <div class="radar-container">
+            <span style="font-size: 40px;">🕵️‍♂️</span>
+        </div>
+        <div class="status-text" id="status-label">ПОИСК ИГРОКОВ</div>
+        <div class="player-count" id="count-label">Найдено: 1 / 10</div>
+        
+        <button class="btn-dark" style="margin-top: 60px; width: 200px;" onclick="cancelSearch()">ОТМЕНА</button>
+    </div>
+
     <div id="screen-game" class="screen">
         <div class="game-header">
-            <span id="player-role">Роль: Ожидание...</span>
-            <div class="phase-indicator" id="game-phase">ДЕНЬ: ОБСУЖДЕНИЕ</div>
+            <div class="role-tag">РОЛЬ: <span id="my-role" style="color:var(--accent)">???</span></div>
+            <div style="font-size: 12px; color: var(--gray)">ДЕНЬ 1</div>
         </div>
 
         <div id="chat-box">
-            <div class="msg system">Добро пожаловать в город! Ждем игроков...</div>
+            <div class="msg system">Город засыпает, просыпается мафия...</div>
         </div>
 
-        <div class="input-group">
-            <input type="text" id="chat-input" placeholder="Кто мафия?">
-            <button class="btn-main" style="padding: 10px 20px;" onclick="sendMsg()">Отправить</button>
+        <div class="input-area">
+            <input type="text" id="chat-input" placeholder="Ваше сообщение...">
+            <button class="btn-main" style="padding: 14px;" onclick="handleSend()">📡</button>
         </div>
     </div>
 
     <div id="screen-shop" class="screen">
         <div class="game-header">
-            <h2>Магазин Stars</h2>
-            <button class="btn-dark" onclick="showScreen('screen-menu')">✕</button>
+            <h2 style="margin:0">МАГАЗИН</h2>
+            <button class="btn-dark" style="padding: 8px 15px;" onclick="showScreen('screen-menu')">✕</button>
         </div>
         
-        <div class="shop-item">
+        <div class="shop-card">
             <div>
-                <div>Роль Комиссара</div>
-                <small style="color:var(--gray)">Шанс +50% в следующей игре</small>
+                <div style="font-weight: bold;">Золотой ник</div>
+                <div style="font-size: 12px; color: var(--gray);">Выделяйтесь среди всех</div>
             </div>
-            <button class="btn-gold" style="padding: 8px 12px;" onclick="buyItem('com_role', 250)">250 ⭐</button>
+            <button class="btn-gold" style="padding: 10px 15px;" onclick="buyItem('gold_nick', 100)">100 ⭐</button>
         </div>
 
-        <div class="shop-item">
+        <div class="shop-card">
             <div>
-                <div>Золотой ник</div>
-                <small style="color:var(--gray)">Выделяйтесь в чате</small>
+                <div style="font-weight: bold;">Выбор роли</div>
+                <div style="font-size: 12px; color: var(--gray);">Карта мафии на 1 игру</div>
             </div>
-            <button class="btn-gold" style="padding: 8px 12px;" onclick="buyItem('gold_nick', 100)">100 ⭐</button>
+            <button class="btn-gold" style="padding: 10px 15px;" onclick="buyItem('mafia_card', 250)">250 ⭐</button>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        tg.enableClosingConfirmation();
+        tg.headerColor = "#0a0a0c";
+        tg.backgroundColor = "#0a0a0c";
 
-        // Настройка сокетов (замени на свой URL после деплоя бэкенда)
-        const SOCKET_URL = "https://your-backend-service.com"; 
-        let socket;
+        let searchTimer;
+        let count = 1;
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+            tg.HapticFeedback.impactOccurred('light');
         }
 
-        function joinGame() {
+        // Логика подбора
+        function startSearch() {
+            showScreen('screen-loading');
+            count = 1;
+            document.getElementById('count-label').innerText = `Найдено: ${count} / 10`;
+            document.getElementById('status-label').innerText = "ПОИСК ИГРОКОВ";
+
+            searchTimer = setInterval(() => {
+                count++;
+                document.getElementById('count-label').innerText = `Найдено: ${count} / 10`;
+                
+                if(count === 7) document.getElementById('status-label').innerText = "РАСПРЕДЕЛЕНИЕ РОЛЕЙ";
+                
+                if(count >= 10) {
+                    clearInterval(searchTimer);
+                    goToGame();
+                }
+            }, 1000);
+        }
+
+        function cancelSearch() {
+            clearInterval(searchTimer);
+            showScreen('screen-menu');
+        }
+
+        function goToGame() {
+            tg.HapticFeedback.notificationOccurred('success');
             showScreen('screen-game');
-            initSocket();
+            const roles = ['Мафия 🔪', 'Мирный 👤', 'Комиссар 🔎', 'Доктор 💊'];
+            const myRole = roles[Math.floor(Math.random() * roles.length)];
+            document.getElementById('my-role').innerText = myRole;
+            addMsg("Система", `Игра началась! Твоя роль: ${myRole}`);
         }
 
-        function initSocket() {
-            // Если сервер еще не готов, симулируем для теста
-            if (!SOCKET_URL.includes("your-backend")) {
-                addMessage("Система", "Подключение к серверу...");
-                return;
-            }
-
-            socket = io(SOCKET_URL);
-
-            socket.on('connect', () => {
-                socket.emit('auth', { 
-                    id: tg.initDataUnsafe.user.id,
-                    name: tg.initDataUnsafe.user.first_name 
-                });
-            });
-
-            socket.on('message', (data) => addMessage(data.user, data.text));
-        }
-
-        function sendMsg() {
-            const input = document.getElementById('chat-input');
-            if (!input.value) return;
-
-            const name = tg.initDataUnsafe.user?.first_name || "Игрок";
+        // Логика чата
+        function handleSend() {
+            const inp = document.getElementById('chat-input');
+            if(!inp.value) return;
             
-            // Если сокет подключен - шлем на сервер
-            if (socket) {
-                socket.emit('chat_msg', { text: input.value });
-            } else {
-                // Тестовый режим без сервера
-                addMessage(name, input.value);
-            }
-            input.value = "";
+            const name = tg.initDataUnsafe.user?.first_name || "Игрок";
+            addMsg(name, inp.value);
+            inp.value = "";
+            tg.HapticFeedback.impactOccurred('light');
         }
 
-        function addMessage(user, text) {
+        function addMsg(user, text) {
             const box = document.getElementById('chat-box');
             const div = document.createElement('div');
-            div.className = 'msg';
-            div.innerHTML = `<b>${user}:</b> ${text}`;
+            div.className = (user === "Система") ? "msg system" : "msg";
+            div.innerHTML = (user === "Система") ? text : `<b>${user}</b> ${text}`;
             box.appendChild(div);
             box.scrollTop = box.scrollHeight;
         }
 
-        function buyItem(itemId, price) {
-            tg.showConfirm(`Купить этот предмет за ${price} Telegram Stars?`, (ok) => {
-                if (ok) {
-                    // Здесь вызываем fetch к твоему серверу для генерации счета
-                    tg.showAlert("Счет сформирован! (Тут будет вызов tg.openInvoice)");
+        // Логика донатов
+        function buyItem(id, price) {
+            tg.showConfirm(`Подтверждаете покупку за ${price} Stars?`, (ok) => {
+                if(ok) {
+                    tg.showAlert("Запрос отправлен боту. Ожидайте счет на оплату!");
+                    // Тут будет fetch('/create-invoice', {item: id})
                 }
             });
         }
