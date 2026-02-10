@@ -3,94 +3,227 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MAFIA REALTIME</title>
+    <title>MAFIA NOIR ULTIMATE</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        :root { --bg: #050507; --accent: #ff3b30; --gold: #f1c40f; --text: #fff; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; }
-        .screen { display: none; height: 100vh; flex-direction: column; padding: 20px; box-sizing: border-box; }
-        .active { display: flex; }
-        .btn { padding: 18px; border-radius: 12px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
-        .btn-main { background: var(--accent); color: white; }
-        .btn-sec { background: #222; color: white; }
-        .room-code { font-size: 40px; color: var(--gold); text-align: center; letter-spacing: 5px; margin: 20px 0; }
-        #chat { flex-grow: 1; background: #111; border-radius: 10px; padding: 10px; overflow-y: auto; margin-bottom: 10px; }
+        :root {
+            --bg: #050507;
+            --accent: #ff3b30;
+            --gold: #f1c40f;
+            --text: #ffffff;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'SF Pro Display', -apple-system, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            /* Анимированный фон */
+            background: radial-gradient(circle at 50% 100%, #1a0505 0%, #050507 100%);
+        }
+
+        /* Общие стили экранов */
+        .screen {
+            display: none;
+            height: 100vh;
+            flex-direction: column;
+            padding: 30px 20px;
+            box-sizing: border-box;
+            transition: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .active { display: flex; animation: slideIn 0.4s ease; }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Логотип */
+        .header-box { text-align: center; margin-bottom: 40px; }
+        .header-box h1 {
+            font-size: 50px; font-weight: 900; letter-spacing: 15px;
+            margin: 0; color: var(--accent);
+            text-shadow: 0 0 25px rgba(255, 59, 48, 0.5);
+        }
+        .header-box p { font-size: 10px; letter-spacing: 5px; color: #666; margin-top: 5px; }
+
+        /* Кнопки */
+        .btn {
+            padding: 20px; border-radius: 20px; border: none;
+            font-size: 14px; font-weight: 800; text-transform: uppercase;
+            letter-spacing: 1px; cursor: pointer; transition: 0.3s;
+            margin-bottom: 15px; position: relative; overflow: hidden;
+        }
+        .btn:active { transform: scale(0.97); }
+
+        .btn-main {
+            background: linear-gradient(135deg, #ff3b30 0%, #8b0000 100%);
+            color: white; box-shadow: 0 10px 20px rgba(255, 59, 48, 0.2);
+        }
+        .btn-glass {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            color: white; backdrop-filter: blur(10px);
+        }
+        .btn-gold {
+            background: linear-gradient(135deg, #f1c40f 0%, #996600 100%);
+            color: black; box-shadow: 0 10px 20px rgba(241, 196, 15, 0.15);
+        }
+
+        /* Карточки магазина */
+        .shop-card {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 25px; padding: 20px;
+            margin-bottom: 15px; display: flex;
+            align-items: center; justify-content: space-between;
+        }
+        .shop-icon {
+            width: 50px; height: 50px; background: rgba(255,255,255,0.05);
+            border-radius: 15px; display: flex; align-items: center;
+            justify-content: center; font-size: 24px; margin-right: 15px;
+        }
+
+        /* Радар */
+        .radar {
+            width: 150px; height: 150px; border-radius: 50%;
+            border: 2px solid var(--accent); margin: 40px auto;
+            position: relative; display: flex; align-items: center; justify-content: center;
+        }
+        .radar::before {
+            content: ''; position: absolute; width: 100%; height: 100%;
+            border: 2px solid var(--accent); border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.7); opacity: 0; } }
+
+        /* Код комнаты */
+        .code-display {
+            font-size: 45px; font-weight: 900; color: var(--gold);
+            text-align: center; letter-spacing: 10px; margin: 20px 0;
+            text-shadow: 0 0 20px rgba(241, 196, 15, 0.4);
+        }
+
+        /* Чат игры */
+        #game-chat {
+            flex-grow: 1; background: rgba(0,0,0,0.3);
+            border-radius: 25px; padding: 15px; margin-bottom: 15px;
+            border: 1px solid var(--glass-border); overflow-y: auto;
+        }
+        .msg { margin-bottom: 10px; font-size: 14px; animation: msgIn 0.3s ease; }
+        @keyframes msgIn { from { opacity: 0; transform: translateX(-10px); } }
     </style>
 </head>
 <body>
 
     <div id="screen-menu" class="screen active">
-        <h1 style="text-align:center; color:var(--accent);">MAFIA ONLINE</h1>
-        <button class="btn btn-main" onclick="connect('online')">БЫСТРЫЙ ПОИСК</button>
-        <button class="btn btn-sec" onclick="showScreen('screen-setup')">СОЗДАТЬ ГРУППУ</button>
-        <button class="btn btn-sec" onclick="showScreen('screen-join')">ВХОД ПО КОДУ</button>
-        <button class="btn btn-sec" style="color:var(--gold)" onclick="showScreen('screen-shop')">МАГАЗИН ⭐</button>
+        <div class="header-box">
+            <p>EST. 2026</p>
+            <h1>MAFIA</h1>
+            <p>NOIR MULTIPLAYER</p>
+        </div>
+        <div style="margin-top: auto;">
+            <button class="btn btn-main" onclick="connect('online')">🎭 Быстрый поиск</button>
+            <button class="btn btn-glass" onclick="showScreen('screen-setup')">👥 Создать группу</button>
+            <button class="btn btn-glass" onclick="showScreen('screen-join')">🔑 Войти по коду</button>
+            <button class="btn btn-gold" onclick="showScreen('screen-shop')">👑 МАГАЗИН ⭐</button>
+        </div>
     </div>
 
     <div id="screen-setup" class="screen">
-        <h2>Игроков в группе:</h2>
-        <button class="btn btn-sec" onclick="connect('local', 5)">5 ИГРОКОВ</button>
-        <button class="btn btn-sec" onclick="connect('local', 10)">10 ИГРОКОВ</button>
+        <h2>Настройка лобби</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px;">
+            <button class="btn btn-glass" onclick="connect('local', 5)">5 Игроков</button>
+            <button class="btn btn-glass" onclick="connect('local', 7)">7 Игроков</button>
+            <button class="btn btn-glass" style="grid-column: span 2;" onclick="connect('local', 10)">10 Игроков</button>
+        </div>
+        <button class="btn btn-glass" style="margin-top: auto;" onclick="showScreen('screen-menu')">Назад</button>
     </div>
 
     <div id="screen-join" class="screen">
-        <h2>Введите код:</h2>
-        <input type="number" id="join-input" style="padding:20px; font-size:24px; text-align:center;">
-        <button class="btn btn-main" onclick="connect('join')">ВОЙТИ</button>
+        <h2>Вход в группу</h2>
+        <input type="number" id="join-input" placeholder="0000" 
+            style="background: var(--glass); border: 1px solid var(--glass-border); padding: 25px; border-radius: 20px; color: white; font-size: 30px; text-align: center; margin-top: 40px; outline: none;">
+        <button class="btn btn-main" style="margin-top: 20px;" onclick="connect('join')">Присоединиться</button>
+        <button class="btn btn-glass" style="margin-top: auto;" onclick="showScreen('screen-menu')">Назад</button>
     </div>
 
     <div id="screen-lobby" class="screen">
-        <div id="code-area" style="display:none;">
-            <p>КОД КОМНАТЫ:</p>
-            <div class="room-code" id="lobby-code">----</div>
+        <div id="code-area" style="display:none; text-align:center;">
+            <p style="color: #666; margin: 0;">КОД ВАШЕЙ КОМНАТЫ</p>
+            <div class="code-display" id="lobby-code" onclick="copyCode()">----</div>
         </div>
-        <h2 id="status">ОЖИДАНИЕ СЕРВЕРА...</h2>
-        <h1 id="count">1 / --</h1>
-        <button class="btn btn-sec" onclick="location.reload()">ОТМЕНА</button>
-    </div>
-
-    <div id="screen-game" class="screen">
-        <h2 id="role" style="color:var(--gold)">ВАША РОЛЬ: ???</h2>
-        <div id="chat"></div>
-        <input type="text" id="minp" placeholder="Сообщение...">
+        <div class="radar">🤵‍♂️</div>
+        <h2 id="status" style="text-align: center; letter-spacing: 2px;">ПОИСК СЕРВЕРА...</h2>
+        <h1 id="count" style="text-align: center; font-size: 40px;">1 / --</h1>
+        <button class="btn btn-glass" style="margin-top: auto;" onclick="location.reload()">Отмена</button>
     </div>
 
     <div id="screen-shop" class="screen">
-        <h2>МАГАЗИН</h2>
-        <button class="btn btn-main" onclick="buy('VIP')">КУПИТЬ VIP (500 ⭐)</button>
-        <button class="btn btn-main" onclick="buy('SHANCE')">ШАНС МАФИИ (150 ⭐)</button>
-        <button class="btn btn-sec" onclick="showScreen('screen-menu')">НАЗАД</button>
+        <h2 style="text-align: center; margin-bottom: 30px;">MAFIA STORE</h2>
+        
+        <div class="shop-card" style="border-color: var(--gold);">
+            <div style="display: flex; align-items: center;">
+                <div class="shop-icon">👑</div>
+                <div><b>VIP Статус</b><br><small style="color: #666;">Ник и рамка</small></div>
+            </div>
+            <button class="btn-gold" style="padding: 10px 15px; margin: 0; border-radius: 12px;" onclick="buy('VIP')">500 ⭐</button>
+        </div>
+
+        <div class="shop-card">
+            <div style="display: flex; align-items: center;">
+                <div class="shop-icon" style="color: var(--accent);">🩸</div>
+                <div><b>Шанс Мафии</b><br><small style="color: #666;">X2 на 24 часа</small></div>
+            </div>
+            <button class="btn-main" style="padding: 10px 15px; margin: 0; border-radius: 12px;" onclick="buy('Luck')">150 ⭐</button>
+        </div>
+
+        <button class="btn btn-glass" style="margin-top: auto;" onclick="showScreen('screen-menu')">Назад</button>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        // !!! ТУТ ДОЛЖЕН БЫТЬ ТВОЙ РЕАЛЬНЫЙ АДРЕС СЕРВЕРА !!!
-        const SERVER_URL = "https://mafia-test-server.onrender.com"; 
+        tg.expand();
+        tg.headerColor = "#050507";
+
+        const SERVER_URL = "https://your-server-address.com"; // ЗАМЕНИТЬ
         let socket;
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+            tg.HapticFeedback.impactOccurred('medium');
         }
 
         function connect(mode, limit = 10) {
             showScreen('screen-lobby');
             const codeInput = document.getElementById('join-input').value;
 
-            socket = io(SERVER_URL);
+            // Если сервера еще нет, имитируем для красоты
+            if (SERVER_URL.includes("your-server")) {
+                if(mode === 'local') {
+                    document.getElementById('code-area').style.display = 'block';
+                    document.getElementById('lobby-code').innerText = Math.floor(1000 + Math.random() * 9000);
+                    document.getElementById('status').innerText = "ЛОББИ СОЗДАНО";
+                    document.getElementById('count').innerText = `1 / ${limit}`;
+                } else {
+                    document.getElementById('status').innerText = "ПОИСК ИГРОКОВ...";
+                    document.getElementById('count').innerText = `1 / 10`;
+                }
+                return;
+            }
 
+            // Реальная работа с сокетами
+            socket = io(SERVER_URL);
             socket.on('connect', () => {
-                document.getElementById('status').innerText = "В ОЧЕРЕДИ...";
-                socket.emit('client_join', {
-                    user: tg.initDataUnsafe.user,
-                    mode: mode,
-                    limit: limit,
-                    code: codeInput
-                });
+                socket.emit('client_join', { user: tg.initDataUnsafe.user, mode, limit, code: codeInput });
             });
 
-            // СЛУШАЕМ СЕРВЕР: Реальные данные о людях
             socket.on('room_update', (data) => {
                 if(data.code) {
                     document.getElementById('code-area').style.display = 'block';
@@ -98,23 +231,19 @@
                 }
                 document.getElementById('count').innerText = `${data.current} / ${data.total}`;
             });
-
-            // СЛУШАЕМ СЕРВЕР: Начало игры
-            socket.on('start', (data) => {
-                showScreen('screen-game');
-                document.getElementById('role').innerText = "ВАША РОЛЬ: " + data.role;
-                tg.HapticFeedback.notificationOccurred('success');
-            });
-
-            socket.on('connect_error', () => {
-                document.getElementById('status').innerText = "СЕРВЕР ОФФЛАЙН";
-            });
         }
 
         function buy(item) {
-            tg.showConfirm(`Купить ${item}?`, (ok) => {
-                if(ok) tg.showAlert("Запрос отправлен!");
+            tg.showConfirm(`Вы хотите приобрести ${item}?`, (ok) => {
+                if(ok) tg.showAlert("Счет выставлен в боте!");
             });
+        }
+
+        function copyCode() {
+            const code = document.getElementById('lobby-code').innerText;
+            navigator.clipboard.writeText(code);
+            tg.showAlert("Код скопирован: " + code);
+            tg.HapticFeedback.notificationOccurred('success');
         }
     </script>
 </body>
