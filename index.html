@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; }
+        .game-container { padding: 20px; }
+        .player-card { background: #333; margin: 10px; padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; }
+        .role-badge { color: #ff4444; font-weight: bold; }
+        .btn-donate { background: #f1c40f; color: black; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-action { background: #3498db; color: white; border: none; padding: 10px; width: 100%; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h2 id="status">Город засыпает...</h2>
+        <div id="players">
+            <div class="player-card">
+                <span>Игрок 1 (Вы)</span>
+                <span class="role-badge">Мафия</span>
+            </div>
+        </div>
+        
+        <button class="btn-action" onclick="makeAction()">Сделать ход</button>
+        <hr>
+        <h3>Магазин бонусов</h3>
+        <button class="btn-donate" onclick="buyRole()">Купить роль Комиссара (100 Stars)</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на весь экран
+
+        function buyRole() {
+            // Здесь будет логика вызова платежа
+            tg.showConfirm("Вы хотите купить смену роли за 100 Telegram Stars?");
+        }
+
+        function makeAction() {
+            tg.showAlert("Вы выбрали цель для ночного визита!");
+        }
+    </script>
+</body>
+</html>
