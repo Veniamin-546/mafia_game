@@ -6,6 +6,7 @@
     <title>MAFIA NOIR ULTIMATE</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    
     <style>
         :root {
             --bg: #050507; --accent: #ff3b30; --gold: #f1c40f;
@@ -15,52 +16,58 @@
 
         body {
             margin: 0; padding: 0; background: var(--bg); color: var(--text);
-            font-family: 'SF Pro Display', -apple-system, sans-serif; overflow: hidden;
-            height: 100vh; background: radial-gradient(circle at 50% 100%, #1a0505 0%, #050507 100%);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden; height: 100vh; 
+            background: radial-gradient(circle at 50% 100%, #1a0505 0%, #050507 100%);
         }
 
+        /* Экраны */
         .screen { display: none; height: 100vh; flex-direction: column; padding: 30px 20px; box-sizing: border-box; }
-        .active { display: flex; animation: slideIn 0.4s ease; }
+        .active { display: flex; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        /* Шапка */
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { font-size: 40px; letter-spacing: 12px; color: var(--accent); margin: 0; text-shadow: 0 0 20px rgba(255,59,48,0.4); }
+        .header p { font-size: 10px; letter-spacing: 4px; color: #666; }
 
         /* Кнопки */
         .btn {
             padding: 18px; border-radius: 18px; border: none; font-size: 14px; font-weight: 800;
-            text-transform: uppercase; letter-spacing: 1px; cursor: pointer; transition: 0.3s;
-            margin-bottom: 12px; width: 100%;
+            text-transform: uppercase; cursor: pointer; transition: 0.2s; width: 100%; margin-bottom: 12px;
         }
+        .btn:active { transform: scale(0.98); }
         .btn-main { background: linear-gradient(135deg, #ff3b30 0%, #8b0000 100%); color: white; }
         .btn-glass { background: var(--glass); border: 1px solid var(--glass-border); color: white; backdrop-filter: blur(10px); }
         .btn-gold { background: linear-gradient(135deg, #f1c40f 0%, #996600 100%); color: black; }
 
-        /* Радар и Код */
-        .radar { width: 120px; height: 120px; border-radius: 50%; border: 2px solid var(--accent); margin: 30px auto; position: relative; display: flex; align-items: center; justify-content: center; }
-        .radar::before { content: ''; position: absolute; width: 100%; height: 100%; border: 2px solid var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
+        /* Радар и Лобби */
+        .radar { width: 100px; height: 100px; border-radius: 50%; border: 2px solid var(--accent); margin: 30px auto; position: relative; display: flex; align-items: center; justify-content: center; font-size: 40px; }
+        .radar::after { content: ''; position: absolute; width: 100%; height: 100%; border: 2px solid var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
-
-        .code-display { font-size: 40px; font-weight: 900; color: var(--gold); text-align: center; letter-spacing: 8px; margin: 15px 0; text-shadow: 0 0 15px rgba(241, 196, 15, 0.4); }
-
-        /* Игровой интерфейс */
-        #game-chat { flex-grow: 1; background: rgba(0,0,0,0.3); border-radius: 20px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--glass-border); overflow-y: auto; }
-        .action-card { background: var(--glass); border: 1px solid var(--gold); border-radius: 20px; padding: 15px; margin-bottom: 15px; text-align: center; }
         
-        .msg { margin-bottom: 8px; font-size: 14px; line-height: 1.4; }
-        .msg b { color: var(--accent); }
-        .msg.system { color: var(--gold); font-style: italic; }
+        .code-box { font-size: 36px; font-weight: 900; color: var(--gold); text-align: center; letter-spacing: 8px; margin: 10px 0; }
 
-        input { background: var(--glass); border: 1px solid var(--glass-border); padding: 15px; border-radius: 15px; color: white; outline: none; }
+        /* Игра */
+        #game-chat { flex-grow: 1; background: rgba(0,0,0,0.4); border-radius: 20px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--glass-border); overflow-y: auto; font-size: 14px; }
+        .action-pannel { background: var(--glass); border: 1px solid var(--gold); border-radius: 20px; padding: 15px; margin-bottom: 15px; text-align: center; }
+        
+        .msg { margin-bottom: 8px; }
+        .msg b { color: var(--accent); }
+        .msg.sys { color: var(--gold); font-style: italic; }
+
+        input { background: var(--glass); border: 1px solid var(--glass-border); padding: 15px; border-radius: 15px; color: white; width: 100%; box-sizing: border-box; outline: none; }
     </style>
 </head>
 <body>
 
     <div id="screen-menu" class="screen active">
-        <div style="text-align: center; margin-bottom: 40px;">
-            <h1 style="font-size: 45px; letter-spacing: 12px; color: var(--accent); margin:0;">MAFIA</h1>
-            <p style="letter-spacing: 5px; color: #666; font-size: 10px;">ONLINE SYSTEM</p>
+        <div class="header">
+            <h1>MAFIA</h1>
+            <p>PREMIUM NOIR</p>
         </div>
         <div style="margin-top: auto;">
-            <button class="btn btn-main" onclick="connect('online')">🎭 Быстрый поиск</button>
+            <button class="btn btn-main" onclick="startConnect('online')">🎭 Быстрая игра</button>
             <button class="btn btn-glass" onclick="showScreen('screen-setup')">👥 Создать группу</button>
             <button class="btn btn-glass" onclick="showScreen('screen-join')">🔑 Войти по коду</button>
             <button class="btn btn-gold" onclick="showScreen('screen-shop')">👑 МАГАЗИН ⭐</button>
@@ -68,58 +75,62 @@
     </div>
 
     <div id="screen-setup" class="screen">
-        <h2>Лимит игроков</h2>
-        <button class="btn btn-glass" onclick="connect('local', 5)">5 Игроков</button>
-        <button class="btn btn-glass" onclick="connect('local', 10)">10 Игроков</button>
+        <h2 style="text-align:center">Участников</h2>
+        <button class="btn btn-glass" onclick="startConnect('local', 5)">5 Человек</button>
+        <button class="btn btn-glass" onclick="startConnect('local', 10)">10 Человек</button>
         <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('screen-menu')">Назад</button>
     </div>
 
     <div id="screen-join" class="screen">
-        <h2>Вход</h2>
-        <input type="number" id="join-input" placeholder="0000" style="font-size: 30px; text-align: center; margin: 40px 0;">
-        <button class="btn btn-main" onclick="connect('join')">Войти</button>
+        <h2 style="text-align:center">Код комнаты</h2>
+        <input type="number" id="input-code" placeholder="0000" style="font-size: 32px; text-align: center;">
+        <button class="btn btn-main" style="margin-top:20px" onclick="startConnect('join')">Войти</button>
         <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('screen-menu')">Назад</button>
     </div>
 
     <div id="screen-lobby" class="screen">
-        <div id="lobby-info" style="text-align:center;">
-            <p style="color: #666; margin: 0;">КОД КОМНАТЫ</p>
-            <div class="code-display" id="lobby-code" onclick="copyCode()">----</div>
+        <div id="lobby-code-view" style="text-align:center">
+            <p style="color:#666; margin:0">КОД ДОСТУПА</p>
+            <div class="code-box" id="display-code">----</div>
         </div>
-        <div class="radar">🤵‍♂️</div>
-        <h2 id="status" style="text-align: center;">ПОИСК СЕТИ...</h2>
-        <h1 id="count" style="text-align: center; font-size: 45px;">1 / --</h1>
+        <div class="radar">🕵️‍♂️</div>
+        <h2 id="lobby-status" style="text-align: center;">ПОИСК СЕТИ...</h2>
+        <h1 id="lobby-count" style="text-align: center; font-size: 45px;">1 / --</h1>
         <button class="btn btn-glass" style="margin-top: auto;" onclick="location.reload()">Отмена</button>
     </div>
 
     <div id="screen-shop" class="screen">
-        <h2>STORE</h2>
-        <div class="action-card" style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="text-align:left"><b>VIP Статус</b><br><small>Золотой ник в чате</small></div>
-            <button class="btn-gold" style="width:auto; padding:10px; margin:0;" onclick="buy('VIP')">500 ⭐</button>
+        <h2 style="text-align:center">STORE</h2>
+        <div class="action-pannel" style="display:flex; justify-content:space-between; align-items:center">
+            <div style="text-align:left"><b>VIP СТАТУС</b><br><small style="color:#666">Золотой ник в чате</small></div>
+            <button class="btn-gold" style="width:auto; padding:10px 15px; margin:0; border-radius:12px;" onclick="buy('VIP')">500 ⭐</button>
+        </div>
+        <div class="action-pannel" style="display:flex; justify-content:space-between; align-items:center">
+            <div style="text-align:left"><b>ШАНС МАФИИ</b><br><small style="color:#666">X2 шанс роли</small></div>
+            <button class="btn-main" style="width:auto; padding:10px 15px; margin:0; border-radius:12px;" onclick="buy('LUCK')">150 ⭐</button>
         </div>
         <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('screen-menu')">Назад</button>
     </div>
 
     <div id="screen-game" class="screen">
-        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-            <b id="game-role" style="color:var(--gold)">РОЛЬ: ???</b>
-            <span id="game-phase" style="color:var(--accent)">ДЕНЬ 1</span>
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-weight:bold">
+            <span id="role-tag" style="color:var(--gold)">РОЛЬ: ???</span>
+            <span style="color:var(--accent)">ДЕНЬ 1</span>
         </div>
 
-        <div id="choice-pannel" class="action-card">
-            <p style="margin-top:0">Выберите действие на текущий ход:</p>
-            <div style="display:flex; gap:10px;">
-                <button class="btn btn-main" style="margin:0; font-size:11px;" onclick="sendAction('work')">🛠 Задание</button>
-                <button class="btn btn-glass" style="margin:0; font-size:11px;" onclick="sendAction('hide')">🕵️‍♂️ Скрыться</button>
+        <div id="game-actions" class="action-pannel">
+            <p style="margin-top:0; font-size:13px">Выберите действие:</p>
+            <div style="display:flex; gap:10px">
+                <button class="btn btn-main" style="margin:0; font-size:11px" onclick="doAction('work')">🛠 Задание</button>
+                <button class="btn btn-glass" style="margin:0; font-size:11px" onclick="doAction('hide')">🕵️‍♂️ Скрыться</button>
             </div>
         </div>
 
         <div id="game-chat"></div>
-        
-        <div style="display:flex; gap:10px;">
-            <input type="text" id="chat-input" placeholder="Сообщение..." style="flex:1">
-            <button class="btn-main" style="width:60px; margin:0; border-radius:15px;" onclick="sendChat()">📡</button>
+
+        <div style="display:flex; gap:8px">
+            <input type="text" id="msg-input" placeholder="Сообщение...">
+            <button class="btn-main" style="width:60px; margin:0; border-radius:15px" onclick="sendMsg()">📡</button>
         </div>
     </div>
 
@@ -127,10 +138,10 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // СЮДА ВСТАВЬ СВОЙ URL СЕРВЕРА
-        const SERVER_URL = "https://your-server.com"; 
+        // ВНИМАНИЕ: Замени на адрес своего сервера, когда он будет готов
+        const SERVER_URL = "https://your-server-link.com"; 
         let socket;
-        let myName = tg.initDataUnsafe.user?.first_name || "Игрок";
+        let userName = tg.initDataUnsafe.user?.first_name || "Игрок";
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -138,62 +149,61 @@
             tg.HapticFeedback.impactOccurred('medium');
         }
 
-        function connect(mode, limit = 10) {
-            const inputCode = document.getElementById('join-input').value;
+        function startConnect(mode, limit = 10) {
+            const code = document.getElementById('input-code').value;
             showScreen('screen-lobby');
 
+            // Подключаемся к серверу
             socket = io(SERVER_URL);
 
             socket.on('connect', () => {
-                document.getElementById('status').innerText = "ПОДКЛЮЧЕНО";
-                socket.emit('join_room', { mode, limit, code: inputCode, name: myName });
+                document.getElementById('lobby-status').innerText = "В ОЧЕРЕДИ";
+                socket.emit('join_room', { mode, limit, code, name: userName });
             });
 
-            // Главная функция: Сервер присылает данные, и они обновляются у всех
+            // Когда кто-то еще заходит, сервер шлет это событие
             socket.on('update_lobby', (data) => {
-                document.getElementById('lobby-code').innerText = data.roomId;
-                document.getElementById('count').innerText = `${data.playersCount} / ${data.limit}`;
-                document.getElementById('status').innerText = "ОЖИДАНИЕ ИГРОКОВ...";
+                document.getElementById('display-code').innerText = data.roomId;
+                document.getElementById('lobby-count').innerText = `${data.playersCount} / ${data.limit}`;
+                document.getElementById('lobby-status').innerText = "ОЖИДАНИЕ ИГРОКОВ...";
             });
 
+            // Когда все собрались
             socket.on('start_game', (data) => {
                 showScreen('screen-game');
-                document.getElementById('game-role').innerText = "РОЛЬ: " + data.role;
+                document.getElementById('role-tag').innerText = "РОЛЬ: " + data.role;
                 tg.HapticFeedback.notificationOccurred('success');
             });
 
-            socket.on('chat_msg', (data) => {
+            // Сообщения в чате
+            socket.on('chat_event', (data) => {
                 const chat = document.getElementById('game-chat');
-                const div = document.createElement('div');
-                div.className = data.type === 'sys' ? 'msg system' : 'msg';
-                div.innerHTML = data.type === 'sys' ? data.text : `<b>${data.user}:</b> ${data.text}`;
-                chat.appendChild(div);
+                const m = document.createElement('div');
+                m.className = data.type === 'sys' ? 'msg sys' : 'msg';
+                m.innerHTML = data.type === 'sys' ? `• ${data.text}` : `<b>${data.user}:</b> ${data.text}`;
+                chat.appendChild(m);
                 chat.scrollTop = chat.scrollHeight;
             });
         }
 
-        function sendAction(type) {
-            const actionText = type === 'work' ? "пошел выполнять задание в порту 🛠" : "решил затаиться в переулке 🕵️‍♂️";
-            socket.emit('player_action', { text: actionText });
-            document.getElementById('choice-pannel').style.display = 'none';
+        function doAction(type) {
+            const txt = type === 'work' ? "выполняет работу в доках 🛠" : "скрылся в тумане 🕵️‍♂️";
+            socket.emit('action', { text: txt });
+            document.getElementById('game-actions').style.display = 'none';
             tg.HapticFeedback.impactOccurred('light');
         }
 
-        function sendChat() {
-            const inp = document.getElementById('chat-input');
+        function sendMsg() {
+            const inp = document.getElementById('msg-input');
             if(!inp.value) return;
-            socket.emit('message', { text: inp.value });
+            socket.emit('chat', { text: inp.value });
             inp.value = "";
         }
 
-        function copyCode() {
-            const code = document.getElementById('lobby-code').innerText;
-            navigator.clipboard.writeText(code);
-            tg.showAlert("Код комнаты " + code + " скопирован!");
-        }
-
         function buy(item) {
-            tg.showConfirm(`Купить ${item}?`, (ok) => { if(ok) tg.showAlert("Запрос отправлен!"); });
+            tg.showConfirm(`Подтвердить покупку ${item}?`, (ok) => {
+                if(ok) tg.showAlert("Запрос на оплату отправлен в бот!");
+            });
         }
     </script>
 </body>
