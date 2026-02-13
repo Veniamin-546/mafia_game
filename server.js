@@ -3,7 +3,7 @@ const { Server } = require('socket.io');
 
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Mafia Noir Server: Running');
+    res.end('Mafia Engine: Round Cycles Active');
 });
 
 const io = new Server(server, { cors: { origin: "*" } });
@@ -18,10 +18,16 @@ io.on('connection', (socket) => {
         socket.isVip = data.isVip;
 
         if (!rooms[roomId]) {
-            rooms[roomId] = { players: [], phase: 'lobby', limit: 2 };
+            rooms[roomId] = { players: [], phase: 'lobby', limit: 2, votes: {} };
         }
 
-        rooms[roomId].players.push({ id: socket.id, name: data.name, role: null, isVip: data.isVip });
+        rooms[roomId].players.push({ 
+            id: socket.id, 
+            name: data.name, 
+            role: null, 
+            isVip: data.isVip, 
+            alive: true 
+        });
 
         io.to(roomId).emit('update_lobby', {
             count: rooms[roomId].players.length,
@@ -30,33 +36,71 @@ io.on('connection', (socket) => {
         });
 
         if (rooms[roomId].players.length >= rooms[roomId].limit && rooms[roomId].phase === 'lobby') {
-            startMatch(roomId);
+            startNewRound(roomId, true);
         }
     });
 
-    function startMatch(roomId) {
+    function startNewRound(roomId, isFirstTime = false) {
         let room = rooms[roomId];
         room.phase = 'night';
-        let p = room.players;
+        room.votes = {};
         
-        // Распределяем роли для теста (1-й всегда мафия)
-        p[0].role = 'mafia';
-        p[1].role = 'citizen';
+        if (isFirstTime) {
+            // Распределение ролей при самом первом старте
+            let p = room.players;
+            p[0].role = 'mafia';
+            p[1].role = 'citizen';
+            if(p[2]) p[2].role = 'citizen'; 
+        }
 
-        p.forEach(pl => {
-            io.to(pl.id).emit('start_game', { 
+        let alivePlayers = room.players.filter(x => x.alive);
+        
+        alivePlayers.forEach(pl => {
+            io.to(pl.id).emit('start_phase', { 
+                phase: 'night',
                 role: pl.role, 
-                players: p.map(x => ({id: x.id, name: x.name})) 
+                players: alivePlayers.map(x => ({id: x.id, name: x.name})) 
             });
         });
-        io.to(roomId).emit('sys_msg', { type: 'night' });
+        io.to(roomId).emit('chat_msg', { type: 'sys', text: "night_start" });
     }
 
-    socket.on('action', () => {
+    // ДЕЙСТВИЕ МАФИИ (УБИЙСТВО)
+    socket.on('action', (targetId) => {
         let room = rooms[socket.roomId];
-        if(room && room.phase === 'night') {
-            room.phase = 'day';
-            io.to(socket.roomId).emit('phase_change', { phase: 'day' });
+        if(!room || room.phase !== 'night') return;
+
+        // Переходим в день
+        room.phase = 'day';
+        let alivePlayers = room.players.filter(x => x.alive);
+
+        io.to(socket.roomId).emit('start_phase', { 
+            phase: 'day',
+            players: alivePlayers.map(x => ({id: x.id, name: x.name}))
+        });
+        io.to(socket.roomId).emit('chat_msg', { type: 'sys', text: "day_start" });
+    });
+
+    // ГОЛОСОВАНИЕ ДНЕМ
+    socket.on('vote', (targetId) => {
+        let room = rooms[socket.roomId];
+        if(!room || room.phase !== 'day') return;
+
+        room.votes[socket.id] = targetId;
+        let aliveCount = room.players.filter(x => x.alive).length;
+
+        // Когда все проголосовали
+        if(Object.keys(room.votes).length >= aliveCount) {
+            // Проверяем, кого выгнали (упрощенно: последний голос решает в тесте на 2-х)
+            let kickedPlayer = room.players.find(p => p.id === targetId);
+            
+            if(kickedPlayer.role === 'mafia') {
+                io.to(socket.roomId).emit('game_over', { winner: 'citizens', text: "Мафия поймана! Мирные победили!" });
+                delete rooms[socket.roomId]; // Конец игры
+            } else {
+                io.to(socket.roomId).emit('chat_msg', { type: 'sys', text: `Жители выгнали ${kickedPlayer.name}, но он был мирным...` });
+                startNewRound(socket.roomId); // Новый круг
+            }
         }
     });
 
@@ -66,12 +110,6 @@ io.on('connection', (socket) => {
             text: msg, 
             vip: socket.isVip 
         });
-    });
-
-    socket.on('disconnect', () => {
-        if(socket.roomId && rooms[socket.roomId]) {
-            rooms[socket.roomId].players = rooms[socket.roomId].players.filter(p => p.id !== socket.id);
-        }
     });
 });
 
