@@ -3,7 +3,7 @@ const { Server } = require('socket.io');
 
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Mafia Server: Phase Logic Fixed');
+    res.end('Mafia Server is Running!');
 });
 
 const io = new Server(server, { cors: { origin: "*" } });
@@ -11,10 +11,10 @@ let rooms = {};
 
 io.on('connection', (socket) => {
     socket.on('join_room', (data) => {
-        let roomId = data.code ? data.code.toString() : "GLOBAL";
+        let roomId = data.code ? data.code.toString() : "1234";
         socket.join(roomId);
         socket.roomId = roomId;
-        socket.userName = data.name || "Игрок";
+        socket.userName = data.name || "Player";
         socket.isVip = data.isVip || false;
 
         if (!rooms[roomId]) {
@@ -32,22 +32,17 @@ io.on('connection', (socket) => {
         });
 
         if (rooms[roomId].players.length >= rooms[roomId].limit && rooms[roomId].phase === 'lobby') {
-            startMatch(roomId);
+            rooms[roomId].phase = 'night';
+            assignRoles(roomId);
         }
     });
 
-    function startMatch(roomId) {
-        let room = rooms[roomId];
-        room.phase = 'night';
-        let p = room.players;
-        let shuffled = [...p].sort(() => 0.5 - Math.random());
+    function assignRoles(roomId) {
+        let p = rooms[roomId].players;
+        p[0].role = 'mafia'; // Первый зашедший всегда мафия для теста
+        if(p[1]) p[1].role = 'citizen';
 
-        shuffled[0].role = 'mafia';
-        if (shuffled.length > 1) shuffled[1].role = 'doctor';
-        if (shuffled.length > 2) shuffled[2].role = 'comisar';
-        for(let i = 3; i < shuffled.length; i++) shuffled[i].role = 'citizen';
-
-        shuffled.forEach(player => {
+        p.forEach(player => {
             io.to(player.id).emit('start_game', { 
                 role: player.role,
                 playersList: p.map(pl => ({name: pl.name, id: pl.id, isVip: pl.isVip})) 
@@ -61,24 +56,16 @@ io.on('connection', (socket) => {
         if (!room) return;
         const player = room.players.find(p => p.id === socket.id);
 
-        // Мафия — триггер смены фазы
         if (player.role === 'mafia') {
-            io.to(socket.roomId).emit('chat_event', { type: 'sys', text: data.action === 'hide' ? "action_stealth" : "action_done" });
+            io.to(socket.roomId).emit('chat_event', { type: 'sys', text: "action_done" });
             
-            // Наступает ДЕНЬ сразу после хода мафии (для динамики)
-            setTimeout(() => {
-                room.phase = 'day';
-                io.to(socket.roomId).emit('phase_change', { 
-                    phase: 'day', 
-                    text: "day_start",
-                    playersList: room.players.map(pl => ({name: pl.name, id: pl.id}))
-                });
-            }, 1000);
-        }
-
-        if (player.role === 'comisar' && data.action === 'check') {
-            const target = room.players.find(p => p.id === data.target);
-            socket.emit('chat_event', { type: 'sys', text: `check_res|${target.name}|${target.role === 'mafia' ? 'mafia' : 'citizen'}` });
+            // ПЕРЕКЛЮЧАЕМ НА ДЕНЬ
+            room.phase = 'day';
+            io.to(socket.roomId).emit('phase_change', { 
+                phase: 'day', 
+                text: "day_start",
+                playersList: room.players.map(pl => ({name: pl.name, id: pl.id}))
+            });
         }
     });
 
