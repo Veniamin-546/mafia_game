@@ -2,114 +2,95 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Mafia Engine: Round Cycles Active');
+    res.writeHead(200);
+    res.end('MAFIA_ENGINE_V2_ONLINE');
 });
 
 const io = new Server(server, { cors: { origin: "*" } });
-let rooms = {};
+let rooms = new Map();
 
 io.on('connection', (socket) => {
-    socket.on('join_room', (data) => {
-        let roomId = data.code || "1234";
+    socket.on('join_match', (userData) => {
+        let roomId = "LOBBY_1"; // Упрощенный подбор для теста
         socket.join(roomId);
-        socket.roomId = roomId;
-        socket.userName = data.name;
-        socket.isVip = data.isVip;
-
-        if (!rooms[roomId]) {
-            rooms[roomId] = { players: [], phase: 'lobby', limit: 2, votes: {} };
+        
+        if (!rooms.has(roomId)) {
+            rooms.set(roomId, { players: [], phase: 'waiting', votes: new Map() });
         }
+        
+        let room = rooms.get(roomId);
+        let player = {
+            id: socket.id,
+            name: userData.name || "Anonymous",
+            isVip: userData.isVip || false,
+            role: null,
+            alive: true
+        };
+        
+        room.players.push(player);
+        socket.roomId = roomId;
 
-        rooms[roomId].players.push({ 
-            id: socket.id, 
-            name: data.name, 
-            role: null, 
-            isVip: data.isVip, 
-            alive: true 
+        io.to(roomId).emit('lobby_update', {
+            players: room.players.map(p => ({ name: p.name, isVip: p.isVip })),
+            count: room.players.length,
+            needed: 2
         });
 
-        io.to(roomId).emit('update_lobby', {
-            count: rooms[roomId].players.length,
-            limit: rooms[roomId].limit,
-            id: roomId
-        });
-
-        if (rooms[roomId].players.length >= rooms[roomId].limit && rooms[roomId].phase === 'lobby') {
-            startNewRound(roomId, true);
+        if (room.players.length >= 2 && room.phase === 'waiting') {
+            startMatch(roomId);
         }
     });
 
-    function startNewRound(roomId, isFirstTime = false) {
-        let room = rooms[roomId];
+    function startMatch(roomId) {
+        let room = rooms.get(roomId);
         room.phase = 'night';
-        room.votes = {};
         
-        if (isFirstTime) {
-            // Распределение ролей при самом первом старте
-            let p = room.players;
-            p[0].role = 'mafia';
-            p[1].role = 'citizen';
-            if(p[2]) p[2].role = 'citizen'; 
-        }
+        // Роли
+        room.players[0].role = 'mafia';
+        room.players[1].role = 'citizen';
 
-        let alivePlayers = room.players.filter(x => x.alive);
-        
-        alivePlayers.forEach(pl => {
-            io.to(pl.id).emit('start_phase', { 
-                phase: 'night',
-                role: pl.role, 
-                players: alivePlayers.map(x => ({id: x.id, name: x.name})) 
+        room.players.forEach(p => {
+            io.to(p.id).emit('game_start', {
+                role: p.role,
+                players: room.players.map(pl => ({ id: pl.id, name: pl.name }))
             });
         });
-        io.to(roomId).emit('chat_msg', { type: 'sys', text: "night_start" });
     }
 
-    // ДЕЙСТВИЕ МАФИИ (УБИЙСТВО)
-    socket.on('action', (targetId) => {
-        let room = rooms[socket.roomId];
-        if(!room || room.phase !== 'night') return;
-
-        // Переходим в день
-        room.phase = 'day';
-        let alivePlayers = room.players.filter(x => x.alive);
-
-        io.to(socket.roomId).emit('start_phase', { 
-            phase: 'day',
-            players: alivePlayers.map(x => ({id: x.id, name: x.name}))
-        });
-        io.to(socket.roomId).emit('chat_msg', { type: 'sys', text: "day_start" });
-    });
-
-    // ГОЛОСОВАНИЕ ДНЕМ
-    socket.on('vote', (targetId) => {
-        let room = rooms[socket.roomId];
-        if(!room || room.phase !== 'day') return;
-
-        room.votes[socket.id] = targetId;
-        let aliveCount = room.players.filter(x => x.alive).length;
-
-        // Когда все проголосовали
-        if(Object.keys(room.votes).length >= aliveCount) {
-            // Проверяем, кого выгнали (упрощенно: последний голос решает в тесте на 2-х)
-            let kickedPlayer = room.players.find(p => p.id === targetId);
-            
-            if(kickedPlayer.role === 'mafia') {
-                io.to(socket.roomId).emit('game_over', { winner: 'citizens', text: "Мафия поймана! Мирные победили!" });
-                delete rooms[socket.roomId]; // Конец игры
-            } else {
-                io.to(socket.roomId).emit('chat_msg', { type: 'sys', text: `Жители выгнали ${kickedPlayer.name}, но он был мирным...` });
-                startNewRound(socket.roomId); // Новый круг
-            }
+    socket.on('execute_action', (targetId) => {
+        let room = rooms.get(socket.roomId);
+        if (room && room.phase === 'night') {
+            room.phase = 'day';
+            io.to(socket.roomId).emit('new_phase', { 
+                phase: 'day', 
+                msg: "Солнце взошло. Город ищет убийцу." 
+            });
         }
     });
 
-    socket.on('chat', (msg) => {
-        io.to(socket.roomId).emit('chat_msg', { 
-            user: (socket.isVip ? "👑 " : "") + socket.userName, 
-            text: msg, 
-            vip: socket.isVip 
-        });
+    socket.on('cast_vote', (targetId) => {
+        let room = rooms.get(socket.roomId);
+        room.votes.set(socket.id, targetId);
+        
+        if (room.votes.size >= room.players.length) {
+            let mafia = room.players.find(p => p.role === 'mafia');
+            if (targetId === mafia.id) {
+                io.to(socket.roomId).emit('end_game', { winner: 'citizens', text: "МАФИЯ ПОЙМАНА!" });
+            } else {
+                io.to(socket.roomId).emit('end_game', { winner: 'mafia', text: "МИРНЫЙ КАЗНЕН. МАФИЯ ПОБЕДИЛА!" });
+            }
+            rooms.delete(socket.roomId);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        if (socket.roomId) {
+            let room = rooms.get(socket.roomId);
+            if (room) {
+                room.players = room.players.filter(p => p.id !== socket.id);
+                if (room.players.length === 0) rooms.delete(socket.roomId);
+            }
+        }
     });
 });
 
