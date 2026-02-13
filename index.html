@@ -18,14 +18,13 @@
         #game-chat { flex-grow: 1; background: rgba(0,0,0,0.3); border-radius: 15px; padding: 10px; overflow-y: auto; margin-bottom: 10px; border: 1px solid var(--glass); }
         .msg { font-size: 14px; margin-bottom: 5px; }
         .msg.sys { color: var(--gold); font-style: italic; }
-        .vip-name { color: var(--gold); font-weight: bold; }
         input { background: var(--glass); border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 10px; color: #fff; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
     <div id="screen-menu" class="screen active">
-        <h1 id="lang-title" style="text-align:center; letter-spacing:5px">MAFIA</h1>
+        <h1 style="text-align:center; letter-spacing:5px">MAFIA</h1>
         <div style="margin-top:auto">
             <button class="btn btn-main" onclick="startConnect('online')" id="btn-quick">Быстрая игра</button>
             <button class="btn btn-glass" onclick="showScreen('screen-setup')" id="btn-create">Создать лобби</button>
@@ -34,37 +33,20 @@
         </div>
     </div>
 
-    <div id="screen-settings" class="screen">
-        <h2 id="set-header">Настройки</h2>
-        <input type="text" id="username-input" placeholder="Никнейм">
-        <p id="set-lang-text">Язык / Language:</p>
-        <div style="display:flex; gap:10px">
-            <button class="btn btn-glass" onclick="setLanguage('ru')">🇷🇺 RU</button>
-            <button class="btn btn-glass" onclick="setLanguage('en')">🇺🇸 EN</button>
-        </div>
-        <button class="btn btn-main" style="margin-top:auto" onclick="saveSettings()">OK</button>
-    </div>
-
     <div id="screen-shop" class="screen">
-        <h2 id="shop-header">Магазин</h2>
-        <div style="background:var(--glass); padding:15px; border-radius:15px; border:1px solid var(--gold)">
-            <b style="color:var(--gold)">VIP STATUS 👑</b>
-            <p id="shop-vip-desc" style="font-size:12px">Золотой ник + Корона + Шанс роли</p>
-            <button class="btn btn-gold" onclick="processPayment('vip')">500 ⭐</button>
+        <h2>SHOP</h2>
+        <div style="background:var(--glass); padding:20px; border-radius:15px; border:1px solid var(--gold); text-align:center">
+            <b style="color:var(--gold); font-size:20px">VIP СТАТУС 👑</b>
+            <p id="vip-desc">Золотой ник + Корона</p>
+            <button class="btn btn-gold" onclick="pay()">500 ⭐ / STARS</button>
         </div>
-        <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('screen-menu')">Назад</button>
-    </div>
-
-    <div id="screen-lobby" class="screen">
-        <h1 id="display-code" style="text-align:center; color:var(--gold)">----</h1>
-        <h2 id="lobby-count" style="text-align:center">1 / 2</h2>
-        <button class="btn btn-glass" style="margin-top:auto" onclick="location.reload()">Отмена</button>
+        <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('screen-menu')">BACK</button>
     </div>
 
     <div id="screen-game" class="screen">
         <div style="display:flex; justify-content:space-between; font-size:12px">
-            <b id="role-tag" style="color:var(--gold)">РОЛЬ: ???</b>
-            <b id="phase-tag" style="color:var(--accent)">НОЧЬ</b>
+            <b id="role-tag" style="color:var(--gold)">ROLE: ???</b>
+            <b id="phase-tag" style="color:var(--accent)">NIGHT</b>
         </div>
         <div id="action-pannel" style="background:var(--glass); padding:10px; border-radius:10px; margin:10px 0">
             <small id="action-hint">Ваш ход:</small>
@@ -80,35 +62,33 @@
     <script>
         const tg = window.Telegram.WebApp;
         const SERVER_URL = "https://mafia-game-skw7.onrender.com"; 
-        let socket, myRole = "", isVip = localStorage.getItem('v') === 'y';
-        let lang = localStorage.getItem('l') || 'ru';
+        let socket, myRole = "", isVip = localStorage.getItem('vip') === 'true';
+        let lang = localStorage.getItem('lang') || 'ru';
 
         const dict = {
-            ru: { quick: "Быстрая игра", create: "Создать лобби", shop: "МАГАЗИН ⭐", settings: "НАСТРОЙКИ", night_start: "🌙 Ночь: Город засыпает...", day_start: "☀️ Утро: Начинаем обсуждение!", action_stealth: "🌑 Кто-то скрылся в тени...", mafia: "МАФИЯ", citizen: "МИРНЫЙ" },
-            en: { quick: "Quick Play", create: "Create Lobby", shop: "SHOP ⭐", settings: "SETTINGS", night_start: "🌙 Night: City falls asleep...", day_start: "☀️ Morning: Start discussion!", action_stealth: "🌑 Someone hid in the shadows...", mafia: "MAFIA", citizen: "CITIZEN" }
+            ru: { night_start: "🌙 Ночь: Город засыпает...", day_start: "☀️ Утро: Время голосовать!", action_stealth: "🌑 Кто-то скрылся...", action_done: "🎭 Ход совершен.", mafia: "МАФИЯ", citizen: "МИРНЫЙ" },
+            en: { night_start: "🌙 Night: City falls asleep...", day_start: "☀️ Morning: Time to vote!", action_stealth: "🌑 Someone hid...", action_done: "🎭 Action done.", mafia: "MAFIA", citizen: "CITIZEN" }
         };
-
-        function setLanguage(l) { lang = l; localStorage.setItem('l', l); applyLang(); }
-        function applyLang() {
-            document.getElementById('btn-quick').innerText = dict[lang].quick;
-            document.getElementById('btn-create').innerText = dict[lang].create;
-            document.getElementById('btn-shop').innerText = dict[lang].shop;
-            document.getElementById('btn-settings').innerText = dict[lang].settings;
-        }
-        applyLang();
 
         function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
 
-        function saveSettings() {
-            localStorage.setItem('n', document.getElementById('username-input').value);
-            showScreen('screen-menu');
-        }
+        // РЕАЛЬНАЯ ОПЛАТА
+        function pay() {
+            // ВАЖНО: Тут должна быть ссылка, сгенерированная твоим ботом через BotFather
+            const invoiceUrl = ""; // Вставь ссылку если есть
 
-        function processPayment(item) {
-            tg.showConfirm(lang === 'ru' ? "Подтвердить оплату?" : "Confirm payment?", (ok) => {
-                if(ok) {
-                    tg.showAlert(lang === 'ru' ? "Счет отправлен ботом в ЛС!" : "Invoice sent by bot!");
-                    if(item === 'vip') { isVip = true; localStorage.setItem('v', 'y'); }
+            if(!invoiceUrl) {
+                tg.showConfirm(lang === 'ru' ? "У вас нет ссылки на оплату. Хотите включить ТЕСТОВЫЙ VIP?" : "No invoice link. Enable TEST VIP?", (ok) => {
+                    if(ok) { isVip = true; localStorage.setItem('vip', 'true'); location.reload(); }
+                });
+                return;
+            }
+
+            tg.openInvoice(invoiceUrl, (status) => {
+                if(status === 'paid') {
+                    isVip = true; localStorage.setItem('vip', 'true');
+                    tg.showAlert("SUCCESS! 👑");
+                    location.reload();
                 }
             });
         }
@@ -117,50 +97,64 @@
             showScreen('screen-lobby');
             socket = io(SERVER_URL);
             socket.on('connect', () => {
-                socket.emit('join_room', { limit, name: localStorage.getItem('n'), isVip });
+                socket.emit('join_room', { limit, name: localStorage.getItem('name'), isVip });
             });
-            socket.on('update_lobby', data => {
-                document.getElementById('display-code').innerText = data.roomId;
-                document.getElementById('lobby-count').innerText = `${data.playersCount} / ${data.limit}`;
-            });
+
             socket.on('start_game', data => {
                 showScreen('screen-game');
                 myRole = data.role;
                 document.getElementById('role-tag').innerText = "ROLE: " + data.role.toUpperCase();
-                renderActions(data.playersList);
+                renderActions(data.playersList, 'night');
             });
+
             socket.on('phase_change', data => {
                 document.getElementById('phase-tag').innerText = data.phase.toUpperCase();
-                document.getElementById('game-chat').innerHTML += `<div class="msg sys">${dict[lang][data.text] || data.text}</div>`;
+                document.getElementById('phase-tag').style.color = "#f1c40f";
+                document.getElementById('game-chat').innerHTML += `<div class="msg sys">• ${dict[lang][data.text]}</div>`;
+                renderActions(data.playersList, 'day');
             });
+
             socket.on('chat_event', data => {
                 let text = data.text;
                 if(data.type === 'sys') text = dict[lang][text] || text;
-                if(text.includes('check_res')) {
-                    let parts = text.split('|');
-                    text = `${parts[1]} = ${dict[lang][parts[2]]}`;
-                }
                 const m = document.createElement('div');
                 m.className = data.type === 'sys' ? 'msg sys' : 'msg';
-                m.innerHTML = data.type === 'sys' ? `• ${text}` : `<b class="${data.isVip?'vip-name':''}">${data.user}:</b> ${text}`;
+                m.innerHTML = data.type === 'sys' ? `• ${text}` : `<b style="color:${data.isVip?'#f1c40f':'#ff3b30'}">${data.user}:</b> ${text}`;
                 document.getElementById('game-chat').appendChild(m);
                 document.getElementById('game-chat').scrollTop = 9999;
             });
         }
 
-        function renderActions(players) {
+        function renderActions(players, phase) {
             const list = document.getElementById('action-list');
+            const hint = document.getElementById('action-hint');
             list.innerHTML = "";
-            if(myRole === 'citizen') { document.getElementById('action-pannel').style.display='none'; return; }
-            players.forEach(p => {
-                if(p.name !== localStorage.getItem('n'))
-                    list.innerHTML += `<button class="btn btn-glass" style="padding:5px; font-size:10px" onclick="sendAct('act','${p.id}','${p.name}')">${p.name}</button>`;
-            });
-            if(myRole === 'mafia') list.innerHTML += `<button class="btn btn-main" onclick="sendAct('hide','','')">HIDE</button>`;
+            document.getElementById('action-pannel').style.display = 'block';
+
+            if (phase === 'night') {
+                if (myRole === 'citizen') { document.getElementById('action-pannel').style.display = 'none'; return; }
+                players.forEach(p => {
+                    if(p.name !== localStorage.getItem('name'))
+                        list.innerHTML += `<button class="btn btn-glass" onclick="sendAct('act','${p.id}','${p.name}')">${p.name}</button>`;
+                });
+                if(myRole === 'mafia') list.innerHTML += `<button class="btn btn-main" onclick="sendAct('hide','','')">HIDE</button>`;
+            } else {
+                // ГОЛОСОВАНИЕ ДНЕМ
+                hint.innerText = lang === 'ru' ? "ГОЛОСОВАНИЕ:" : "VOTING:";
+                players.forEach(p => {
+                    if(p.name !== localStorage.getItem('name'))
+                        list.innerHTML += `<button class="btn btn-main" onclick="vote('${p.name}')">${p.name}</button>`;
+                });
+            }
         }
 
         function sendAct(a, id, n) {
             socket.emit('game_action', { action: a, target: id, targetName: n });
+            document.getElementById('action-pannel').style.display = 'none';
+        }
+
+        function vote(name) {
+            socket.emit('chat', { text: `📢 VOTE AGAINST: ${name}` });
             document.getElementById('action-pannel').style.display = 'none';
         }
 
