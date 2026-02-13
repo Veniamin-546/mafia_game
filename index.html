@@ -7,75 +7,91 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        :root { --bg: #050507; --accent: #ff3b30; --gold: #f1c40f; --text: #fff; --glass: rgba(255,255,255,0.05); }
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; overflow: hidden; height: 100vh; }
-        .screen { display: none; height: 100vh; flex-direction: column; padding: 20px; box-sizing: border-box; }
-        .active { display: flex; }
-        .btn { padding: 15px; border-radius: 12px; border: none; font-weight: bold; width: 100%; margin-bottom: 10px; cursor: pointer; }
-        .btn-main { background: var(--accent); color: #fff; }
-        .btn-glass { background: var(--glass); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
-        .btn-gold { background: var(--gold); color: #000; }
-        #game-chat { flex-grow: 1; background: rgba(0,0,0,0.3); border-radius: 15px; padding: 10px; overflow-y: auto; margin-bottom: 10px; border: 1px solid var(--glass); }
-        .msg { font-size: 14px; margin-bottom: 5px; }
-        .msg.sys { color: var(--gold); font-style: italic; }
-        input { background: var(--glass); border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 10px; color: #fff; width: 100%; box-sizing: border-box; margin-bottom: 10px; outline: none; }
+        :root { --bg: #0a0a0c; --accent: #e63946; --gold: #ffb703; --text: #f1faee; --glass: rgba(255,255,255,0.07); }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; height: 100vh; }
+        .screen { display: none; height: 100vh; flex-direction: column; padding: 25px; box-sizing: border-box; transition: 0.3s; }
+        .active { display: flex; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        h1 { text-align: center; letter-spacing: 6px; color: var(--accent); text-shadow: 0 0 20px rgba(230,57,70,0.4); }
+        .btn { padding: 18px; border-radius: 16px; border: none; font-weight: 800; font-size: 14px; text-transform: uppercase; cursor: pointer; transition: 0.2s; width: 100%; margin-bottom: 12px; }
+        .btn-main { background: var(--accent); color: white; box-shadow: 0 4px 15px rgba(230,57,70,0.3); }
+        .btn-glass { background: var(--glass); color: white; border: 1px solid rgba(255,255,255,0.1); }
+        .btn-gold { background: linear-gradient(45deg, #ffb703, #fb8500); color: #000; }
+        
+        #chat { flex-grow: 1; background: rgba(0,0,0,0.5); border-radius: 20px; padding: 15px; overflow-y: auto; margin-bottom: 15px; border: 1px solid var(--glass); }
+        .msg { margin-bottom: 8px; font-size: 14px; animation: slideIn 0.2s ease; }
+        @keyframes slideIn { from { opacity:0; transform:translateX(-5px); } to { opacity:1; transform:translateX(0); } }
+        .sys { color: var(--gold); font-style: italic; text-align: center; border-bottom: 1px solid var(--glass); padding-bottom: 5px; margin: 10px 0; }
+        
+        input { background: var(--glass); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 14px; color: white; width: 100%; box-sizing: border-box; outline: none; }
+        .card { background: var(--glass); padding: 20px; border-radius: 20px; border: 1px solid var(--glass); text-align: center; }
     </style>
 </head>
 <body>
 
-    <div id="screen-menu" class="screen active">
-        <h1 style="text-align:center; color:var(--accent)">MAFIA</h1>
+    <div id="screen-name" class="screen active">
+        <h1>MAFIA</h1>
         <div style="margin-top:auto">
-            <button class="btn btn-main" onclick="startConnect('online')">Быстрая игра</button>
-            <button class="btn btn-glass" onclick="showScreen('screen-setup')">Создать лобби</button>
-            <button class="btn btn-gold" onclick="showScreen('screen-shop')">МАГАЗИН ⭐</button>
-            <button class="btn btn-glass" onclick="showScreen('screen-settings')">⚙️ НАСТРОЙКИ</button>
+            <p style="text-align:center">Представьтесь, детектив:</p>
+            <input type="text" id="name-input" placeholder="Ваш никнейм...">
+            <button class="btn btn-main" style="margin-top:15px" onclick="saveName()">ВОЙТИ В ГОРОД</button>
         </div>
     </div>
 
-    <div id="screen-settings" class="screen">
-        <h2>НИКНЕЙМ</h2>
-        <input type="text" id="name-input" placeholder="Введите ваше имя...">
-        <button class="btn btn-main" onclick="saveName()">СОХРАНИТЬ</button>
+    <div id="screen-menu" class="screen">
+        <h1>MENU</h1>
+        <div style="margin-top:auto">
+            <button class="btn btn-main" onclick="start(2)">БЫСТРЫЙ ТЕСТ (2 ИГРОКА)</button>
+            <button class="btn btn-glass" onclick="showScreen('screen-shop')">💎 МАГАЗИН</button>
+            <button class="btn btn-glass" onclick="location.reload()">СМЕНИТЬ НИК</button>
+        </div>
     </div>
 
     <div id="screen-shop" class="screen">
-        <h2>МАГАЗИН</h2>
-        <div style="border: 1px solid var(--gold); padding: 20px; border-radius: 15px; text-align: center">
-            <h3 style="color:var(--gold)">VIP СТАТУС 👑</h3>
-            <p>Золотой ник + Корона</p>
-            <button class="btn btn-gold" onclick="buyVip()">500 ⭐</button>
+        <h1>SHOP</h1>
+        <div class="card" style="border-color: var(--gold)">
+            <h2 style="color:var(--gold); margin:0">VIP STATUS 👑</h2>
+            <p style="opacity:0.7">Золотой ник + Корона в чате</p>
+            <button class="btn btn-gold" onclick="buy()">КУПИТЬ (500 ⭐)</button>
         </div>
         <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('screen-menu')">НАЗАД</button>
     </div>
 
     <div id="screen-lobby" class="screen">
-        <h1 id="code-display" style="text-align:center; font-size:40px; color:var(--gold)">----</h1>
-        <h2 id="count-display" style="text-align:center">1 / 2</h2>
+        <p style="text-align:center; opacity:0.5">КОД КОМНАТЫ</p>
+        <h1 id="room-id" style="color:var(--gold); font-size:40px">----</h1>
+        <div class="card">
+            <p>Ожидание игроков...</p>
+            <h2 id="room-count">1 / 2</h2>
+        </div>
         <button class="btn btn-glass" style="margin-top:auto" onclick="location.reload()">ОТМЕНА</button>
     </div>
 
     <div id="screen-game" class="screen">
-        <div style="display:flex; justify-content:space-between; font-size:12px">
-            <b id="role-tag">ROLE: ???</b>
-            <b id="phase-tag" style="color:var(--accent)">NIGHT</b>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+            <b id="role-display" style="color:var(--gold)">???</b>
+            <b id="phase-display" style="color:var(--accent)">НОЧЬ</b>
         </div>
-        <div id="action-pannel" style="background:var(--glass); padding:10px; border-radius:10px; margin:10px 0">
-            <b id="action-hint">Ваш ход:</b>
-            <div id="action-list"></div>
+        <div id="pannel" class="card" style="margin-bottom:15px; display:none">
+            <small id="hint">Выберите цель:</small>
+            <div id="targets" style="margin-top:10px"></div>
         </div>
-        <div id="game-chat"></div>
-        <div style="display:flex; gap:5px">
-            <input type="text" id="msg-input" placeholder="Чат..." style="margin:0">
-            <button class="btn-main" style="width:60px; margin:0" onclick="sendMsg()">📡</button>
+        <div id="chat"></div>
+        <div style="display:flex; gap:10px">
+            <input type="text" id="msg-input" placeholder="Сообщение...">
+            <button onclick="sendMsg()" style="background:var(--accent); border:none; border-radius:14px; width:60px; color:white">📡</button>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        const SERVER_URL = "https://mafia-game-skw7.onrender.com"; 
-        let socket, myRole = "", isVip = localStorage.getItem('isVip') === 'true';
-        let myName = localStorage.getItem('myName') || "Игрок";
+        const socket = io("https://mafia-game-skw7.onrender.com"); // ЗАМЕНИ НА СВОЙ URL
+        let myName = localStorage.getItem('mafia_name');
+        let isVip = localStorage.getItem('mafia_vip') === 'true';
+        let myRole = "";
+
+        if(myName) showScreen('screen-menu');
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -83,100 +99,91 @@
         }
 
         function saveName() {
-            const val = document.getElementById('name-input').value;
-            if(val) {
-                myName = val;
-                localStorage.setItem('myName', val);
+            const input = document.getElementById('name-input').value;
+            if(input.length > 1) {
+                myName = input;
+                localStorage.setItem('mafia_name', input);
                 showScreen('screen-menu');
             }
         }
 
-        function buyVip() {
-            tg.showConfirm("Купить VIP через Telegram Stars?", (ok) => {
+        function buy() {
+            tg.showConfirm("Подтвердить оплату 500 Stars?", (ok) => {
                 if(ok) {
                     isVip = true;
-                    localStorage.setItem('isVip', 'true');
-                    tg.showAlert("Вы купили VIP! Корона появится в следующей игре.");
+                    localStorage.setItem('mafia_vip', 'true');
+                    tg.showAlert("Вы получили VIP! 👑");
                     location.reload();
                 }
             });
         }
 
-        function startConnect(mode, limit = 2) {
-            if(!localStorage.getItem('myName')) { showScreen('screen-settings'); return; }
+        function start(limit) {
             showScreen('screen-lobby');
-            socket = io(SERVER_URL);
-
-            socket.on('connect', () => {
-                socket.emit('join_room', { limit, name: myName, isVip });
-            });
-
-            socket.on('update_lobby', data => {
-                document.getElementById('code-display').innerText = data.roomId;
-                document.getElementById('count-display').innerText = `${data.playersCount} / ${data.limit}`;
-            });
-
-            socket.on('start_game', data => {
-                showScreen('screen-game');
-                myRole = data.role;
-                document.getElementById('role-tag').innerText = "ROLE: " + data.role.toUpperCase();
-                renderActions(data.playersList, 'night');
-            });
-
-            socket.on('phase_change', data => {
-                document.getElementById('phase-tag').innerText = data.phase.toUpperCase();
-                document.getElementById('phase-tag').style.color = "#f1c40f"; // Золотой для дня
-                renderActions(data.playersList, 'day');
-            });
-
-            socket.on('chat_event', data => {
-                const chat = document.getElementById('game-chat');
-                const m = document.createElement('div');
-                m.className = data.type === 'sys' ? 'msg sys' : 'msg';
-                
-                const sysText = { night_start: "🌙 Ночь наступила. Мафия ходит.", day_start: "☀️ Утро! Обсуждаем и голосуем.", action_done: "🎭 Мафия сделала выбор." };
-                let text = data.type === 'sys' ? (sysText[data.text] || data.text) : data.text;
-                
-                m.innerHTML = data.type === 'sys' ? `• ${text}` : `<b style="color:${data.isVip?'#f1c40f':'#ff3b30'}">${data.user}:</b> ${text}`;
-                chat.appendChild(m);
-                chat.scrollTop = 9999;
-            });
+            socket.emit('join_room', { name: myName, isVip: isVip, limit: limit });
         }
 
-        function renderActions(players, phase) {
-            const list = document.getElementById('action-list');
-            const pannel = document.getElementById('action-pannel');
-            list.innerHTML = "";
-            pannel.style.display = 'block';
+        socket.on('update_lobby', data => {
+            document.getElementById('room-id').innerText = data.id;
+            document.getElementById('room-count').innerText = `${data.count} / ${data.limit}`;
+        });
 
-            if(phase === 'night') {
-                if(myRole !== 'mafia') { pannel.style.display = 'none'; return; }
+        socket.on('start_game', data => {
+            showScreen('screen-game');
+            myRole = data.role;
+            document.getElementById('role-display').innerText = "РОЛЬ: " + data.role.toUpperCase();
+            if(myRole === 'mafia') {
+                renderActions(data.players, "Ночной ход:");
+            }
+        });
+
+        socket.on('sys_msg', data => {
+            const chat = document.getElementById('chat');
+            const msg = data.type === 'night' ? "🌙 Ночь наступила. Мафия делает выбор." : "☀️ Утро! Время обсуждать.";
+            chat.innerHTML += `<div class="msg sys">${msg}</div>`;
+        });
+
+        socket.on('phase_change', data => {
+            document.getElementById('phase-display').innerText = "ДЕНЬ";
+            document.getElementById('phase-display').style.color = "#ffb703";
+            const chat = document.getElementById('chat');
+            chat.innerHTML += `<div class="msg sys">☀️ Утро наступило! Кто мафия?</div>`;
+            renderActions([], "Голосование (в чате):");
+        });
+
+        socket.on('chat_msg', data => {
+            const chat = document.getElementById('chat');
+            chat.innerHTML += `<div class="msg"><b style="color:${data.vip?'#ffb703':'#ff3b30'}">${data.user}:</b> ${data.text}</div>`;
+            chat.scrollTop = chat.scrollHeight;
+        });
+
+        function renderActions(players, hintText) {
+            const pannel = document.getElementById('pannel');
+            const targets = document.getElementById('targets');
+            const hint = document.getElementById('hint');
+            pannel.style.display = 'block';
+            hint.innerText = hintText;
+            targets.innerHTML = "";
+
+            if(myRole === 'mafia' && players.length > 0) {
                 players.forEach(p => {
-                    if(p.id !== socket.id)
-                        list.innerHTML += `<button class="btn btn-main" onclick="sendAct('${p.id}')">УБИТЬ ${p.name}</button>`;
+                    if(p.name !== myName) {
+                        targets.innerHTML += `<button class="btn btn-main" onclick="doAction()">${p.name}</button>`;
+                    }
                 });
             } else {
-                document.getElementById('action-hint').innerText = "ГОЛОСОВАНИЕ:";
-                players.forEach(p => {
-                    if(p.id !== socket.id)
-                        list.innerHTML += `<button class="btn btn-glass" onclick="vote('${p.name}')">${p.name}</button>`;
-                });
+                targets.innerHTML = `<p style="font-size:12px; opacity:0.6">Обсудите в чате и вынесите вердикт.</p>`;
             }
         }
 
-        function sendAct(tid) {
-            socket.emit('game_action', { target: tid });
-            document.getElementById('action-pannel').style.display = 'none';
-        }
-
-        function vote(name) {
-            socket.emit('chat', { text: `Я голосую против ${name}!` });
-            document.getElementById('action-pannel').style.display = 'none';
+        function doAction() {
+            socket.emit('action');
+            document.getElementById('pannel').style.display = 'none';
         }
 
         function sendMsg() {
             const i = document.getElementById('msg-input');
-            if(i.value) socket.emit('chat', { text: i.value });
+            if(i.value) socket.emit('chat', i.value);
             i.value = "";
         }
     </script>
