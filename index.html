@@ -1,152 +1,190 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MAFIA NOIR PREMIUM</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        :root { --red: #ff3b30; --gold: #ffcc00; --bg: #0a0a0b; --card: #151517; }
-        body { margin: 0; background: var(--bg); color: white; font-family: sans-serif; }
-        .screen { display: none; height: 100vh; flex-direction: column; padding: 20px; box-sizing: border-box; }
-        .active { display: flex; }
+        :root { --red: #ff3b30; --gold: #ffcc00; --bg: #050507; --card: #121214; --glass: rgba(255,255,255,0.05); }
         
-        h1 { text-align: center; color: var(--red); letter-spacing: 4px; margin-bottom: 30px; }
-        .btn { padding: 18px; border-radius: 15px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 12px; text-transform: uppercase; font-size: 13px; }
-        .btn-main { background: var(--red); color: white; }
-        .btn-glass { background: rgba(255,255,255,0.05); color: white; border: 1px solid rgba(255,255,255,0.1); }
-        .btn-gold { background: linear-gradient(45deg, #ffcc00, #ff9500); color: black; }
+        body { margin: 0; background: var(--bg); color: #fff; font-family: -apple-system, system-ui, sans-serif; overflow: hidden; }
         
-        input { background: var(--card); border: 1px solid #222; padding: 15px; border-radius: 12px; color: white; margin-bottom: 15px; outline: none; }
-        #chat { flex-grow: 1; background: rgba(0,0,0,0.3); border-radius: 15px; padding: 15px; overflow-y: auto; margin-bottom: 15px; border: 1px solid #222; }
-        .msg { margin-bottom: 8px; font-size: 14px; }
-        .sys { color: var(--gold); text-align: center; font-size: 12px; margin: 10px 0; }
+        .screen { display: none; height: 100vh; flex-direction: column; padding: 25px; box-sizing: border-box; }
+        .active { display: flex; animation: slideUp 0.4s cubic-bezier(0.1, 0.7, 1.0, 0.1); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        h1 { text-align: center; font-size: 42px; letter-spacing: 6px; color: var(--red); text-shadow: 0 0 20px rgba(255,59,48,0.3); margin: 20px 0; }
+        
+        .btn { padding: 18px; border-radius: 16px; border: none; font-weight: 800; width: 100%; cursor: pointer; transition: 0.2s; font-size: 14px; text-transform: uppercase; margin-bottom: 12px; }
+        .btn-primary { background: var(--red); color: #fff; box-shadow: 0 4px 15px rgba(255,59,48,0.2); }
+        .btn-secondary { background: var(--glass); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
+        .btn-gold { background: linear-gradient(45deg, #ffcc00, #ff9500); color: #000; }
+        
+        .card { background: var(--card); border-radius: 24px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 20px; }
+        input { background: #000; border: 1px solid #222; padding: 16px; border-radius: 12px; color: #fff; width: 100%; box-sizing: border-box; outline: none; font-size: 16px; }
+        input:focus { border-color: var(--red); }
+
+        #chat-area { flex-grow: 1; overflow-y: auto; padding: 10px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px; }
+        .msg { font-size: 14px; max-width: 85%; padding: 10px 14px; border-radius: 18px; background: var(--glass); align-self: flex-start; }
+        .msg.vip { border-left: 3px solid var(--gold); }
+        .msg b { color: var(--red); margin-right: 5px; }
+        .msg.sys { background: none; color: var(--gold); align-self: center; font-style: italic; font-size: 12px; border: none; }
+
+        .game-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .role-badge { background: var(--glass); padding: 6px 14px; border-radius: 20px; border: 1px solid var(--gold); font-size: 12px; font-weight: bold; color: var(--gold); }
     </style>
 </head>
 <body>
 
     <div id="scr-menu" class="screen active">
-        <h1>MAFIA NOIR</h1>
+        <h1>MAFIA</h1>
         <div style="margin-top:auto">
-            <button class="btn btn-main" onclick="join('quick')">Быстрая игра</button>
-            <button class="btn btn-glass" onclick="showScreen('scr-lobby-create')">Создать лобби</button>
+            <button class="btn btn-primary" onclick="showScreen('scr-lobby-find')">Найти игру</button>
+            <button class="btn btn-secondary" onclick="showScreen('scr-lobby-create')">Свой код</button>
             <button class="btn btn-gold" onclick="showScreen('scr-shop')">Магазин ⭐</button>
-            <button class="btn btn-glass" onclick="showScreen('scr-settings')">Настройки ⚙️</button>
+            <button class="btn btn-secondary" onclick="showScreen('scr-profile')">Профиль</button>
         </div>
     </div>
 
-    <div id="scr-lobby-create" class="screen">
-        <h1>ЛОББИ</h1>
-        <input type="text" id="lobby-code" placeholder="Введите код (например: 777)">
-        <button class="btn btn-main" onclick="join('private')">Войти по коду</button>
-        <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('scr-menu')">Назад</button>
+    <div id="scr-profile" class="screen">
+        <h1>PROFILE</h1>
+        <div class="card">
+            <label style="font-size:12px; opacity:0.5; margin-left:5px">Ваш псевдоним</label>
+            <input type="text" id="name-input" placeholder="Введите ник..." style="margin-top:10px">
+            <button class="btn btn-primary" style="margin-top:20px" onclick="saveName()">Сохранить</button>
+        </div>
+        <button class="btn btn-secondary" style="margin-top:auto" onclick="showScreen('scr-menu')">Назад</button>
     </div>
 
     <div id="scr-shop" class="screen">
         <h1>SHOP</h1>
-        <div style="background:var(--card); padding:20px; border-radius:20px; text-align:center; border: 1px solid var(--gold)">
-            <h3 style="color:var(--gold)">VIP СТАТУС 👑</h3>
-            <p style="opacity:0.6">Корона в чате и золотой ник</p>
-            <button class="btn btn-gold" style="width:100%" onclick="pay()">500 ⭐ / STARS</button>
+        <div class="card" style="border-color: var(--gold); text-align:center">
+            <h2 style="color:var(--gold); margin:0">VIP PASS 👑</h2>
+            <p style="opacity:0.6; font-size:13px">Золотой ник, корона в чате и особый статус</p>
+            <button class="btn btn-gold" onclick="buyVip()">Активировать за 500 ⭐</button>
         </div>
-        <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('scr-menu')">Назад</button>
+        <button class="btn btn-secondary" style="margin-top:auto" onclick="showScreen('scr-menu')">Назад</button>
     </div>
 
-    <div id="scr-settings" class="screen">
-        <h1>PROFILE</h1>
-        <input type="text" id="name-in" placeholder="Ваш ник...">
-        <button class="btn btn-main" onclick="saveName()">Сохранить</button>
-        <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('scr-menu')">Назад</button>
+    <div id="scr-lobby-create" class="screen">
+        <h1>LOBBY</h1>
+        <div class="card">
+            <input type="text" id="code-input" placeholder="Код комнаты (напр. 777)">
+            <button class="btn btn-primary" style="margin-top:15px" onclick="startWithCode()">Создать / Войти</button>
+        </div>
+        <button class="btn btn-secondary" style="margin-top:auto" onclick="showScreen('scr-menu')">Назад</button>
     </div>
 
     <div id="scr-game" class="screen">
-        <div style="display:flex; justify-content:space-between; margin-bottom:15px">
-            <b id="role-tag" style="color:var(--gold)">???</b>
-            <b id="phase-tag" style="color:var(--red)">НОЧЬ</b>
+        <div class="game-header">
+            <div id="role-display" class="role-badge">РОЛЬ: ???</div>
+            <div id="phase-display" style="font-weight:900; color:var(--red)">НОЧЬ</div>
         </div>
-        <div id="chat"></div>
-        <div id="actions" style="display:none; background:var(--card); padding:10px; border-radius:15px; margin-bottom:15px">
-            <div id="target-list"></div>
+        
+        <div id="chat-area"></div>
+
+        <div id="night-controls" class="card" style="display:none; border-color:var(--red)">
+            <p style="margin:0 0 10px 0; font-size:12px; opacity:0.7">Кого устраним?</p>
+            <div id="target-btns"></div>
         </div>
-        <div style="display:flex; gap:10px">
-            <input type="text" id="msg-in" placeholder="..." style="margin:0; flex-grow:1">
-            <button onclick="send()" style="background:var(--red); border:none; width:50px; border-radius:12px; color:white">📡</button>
+
+        <div style="display:flex; gap:10px; align-items:center">
+            <input type="text" id="chat-input" placeholder="Ваше сообщение..." style="margin:0; flex-grow:1">
+            <button onclick="sendMsg()" style="background:var(--red); border:none; width:50px; height:50px; border-radius:15px; color:#fff">📡</button>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        const socket = io("ТВОЯ_ССЫЛКА_НА_RENDER");
-        let isVip = localStorage.getItem('v') === 'true';
-        let myName = localStorage.getItem('n') || tg.initDataUnsafe?.user?.first_name || "Игрок";
-        let myRole = "";
+        tg.expand();
+        
+        const socket = io("ТВОЯ_ССЫЛКА_НА_RENDER"); 
+        
+        let user = {
+            name: localStorage.getItem('m_name') || tg.initDataUnsafe?.user?.first_name || "Детектив",
+            isVip: localStorage.getItem('m_vip') === 'true'
+        };
 
-        document.getElementById('name-in').value = myName;
+        document.getElementById('name-input').value = user.name;
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+            if(id === 'scr-lobby-find') startWithCode('QUICK_MATCH');
         }
 
         function saveName() {
-            myName = document.getElementById('name-in').value;
-            localStorage.setItem('n', myName);
-            tg.showAlert("Сохранено!");
+            user.name = document.getElementById('name-input').value;
+            localStorage.setItem('m_name', user.name);
+            tg.showAlert("Профиль обновлен!");
             showScreen('scr-menu');
         }
 
-        function pay() {
-            tg.showConfirm("Купить VIP?", (ok) => {
-                if(ok) { localStorage.setItem('v', 'true'); isVip = true; location.reload(); }
-            });
-        }
-
-        function join(mode) {
-            const code = document.getElementById('lobby-code').value;
-            showScreen('scr-game');
-            socket.emit('join_room', { name: myName, isVip, mode, code });
-        }
-
-        socket.on('game_start', (d) => {
-            myRole = d.role;
-            document.getElementById('role-tag').innerText = d.role.toUpperCase();
-            if(myRole === 'mafia') renderActions(d.players);
-        });
-
-        socket.on('phase_change', (p) => {
-            document.getElementById('phase-tag').innerText = p.toUpperCase();
-            document.getElementById('phase-tag').style.color = p === 'day' ? '#ffcc00' : '#ff3b30';
-            const chat = document.getElementById('chat');
-            chat.innerHTML += `<div class="sys">☀️ Утро! Обсудите и проголосуйте за мафию.</div>`;
-            renderActions([]); // В тесте просто чат
-        });
-
-        socket.on('chat_msg', (d) => {
-            const chat = document.getElementById('chat');
-            chat.innerHTML += `<div class="msg"><b style="color:${d.isVip?'#ffcc00':'#ff3b30'}">${d.user}:</b> ${d.text}</div>`;
-            chat.scrollTop = chat.scrollHeight;
-        });
-
-        function renderActions(players) {
-            const act = document.getElementById('actions');
-            const list = document.getElementById('target-list');
-            act.style.display = 'block';
-            list.innerHTML = "";
-            players.forEach(p => {
-                if(p.name !== myName) {
-                    list.innerHTML += `<button class="btn btn-main" style="width:100%" onclick="doAct('${p.id}')">УБИТЬ ${p.name}</button>`;
+        function buyVip() {
+            tg.showConfirm("Подтвердить покупку VIP за 500 Stars?", (ok) => {
+                if(ok) {
+                    localStorage.setItem('m_vip', 'true');
+                    user.isVip = true;
+                    location.reload();
                 }
             });
         }
 
-        function doAct(id) {
-            socket.emit('game_action', id);
-            document.getElementById('actions').style.display = 'none';
+        function startWithCode(customCode) {
+            const code = customCode || document.getElementById('code-input').value || "1234";
+            showScreen('scr-game');
+            socket.emit('join_game', { name: user.name, isVip: user.isVip, code: code });
         }
 
-        function send() {
-            const i = document.getElementById('msg-in');
-            if(i.value) { socket.emit('chat', i.value); i.value = ""; }
+        socket.on('game_init', (data) => {
+            document.getElementById('role-display').innerText = "РОЛЬ: " + data.role.toUpperCase();
+            if(data.role === 'mafia') {
+                const btns = document.getElementById('target-btns');
+                btns.innerHTML = "";
+                data.opponents.forEach(opp => {
+                    btns.innerHTML += `<button class="btn btn-primary" onclick="nightAction()">${opp.name}</button>`;
+                });
+                document.getElementById('night-controls').style.display = 'block';
+            }
+        });
+
+        socket.on('phase_change', (data) => {
+            document.getElementById('phase-display').innerText = data.phase.toUpperCase();
+            document.getElementById('phase-display').style.color = (data.phase === 'day' ? '#ffcc00' : '#ff3b30');
+            document.getElementById('night-controls').style.display = 'none';
+            addChatMsg(data.msg, true);
+        });
+
+        socket.on('sys_msg', (msg) => addChatMsg(msg, true));
+        socket.on('new_msg', (data) => addChatMsg(data));
+
+        function addChatMsg(data, isSys = false) {
+            const area = document.getElementById('chat-area');
+            const div = document.createElement('div');
+            if(isSys) {
+                div.className = 'msg sys';
+                div.innerText = data;
+            } else {
+                div.className = 'msg' + (data.isVip ? ' vip' : '');
+                div.innerHTML = `<b>${data.user}:</b> ${data.text}`;
+            }
+            area.appendChild(div);
+            area.scrollTop = area.scrollHeight;
+        }
+
+        function nightAction() {
+            socket.emit('execute_night_action');
+            document.getElementById('night-controls').style.display = 'none';
+        }
+
+        function sendMsg() {
+            const inp = document.getElementById('chat-input');
+            if(inp.value) {
+                socket.emit('send_chat', inp.value);
+                inp.value = "";
+            }
         }
     </script>
 </body>
