@@ -1,111 +1,84 @@
 const http = require('http');
 const { Server } = require('socket.io');
 
-// 1. Создаем базовый HTTP сервер, чтобы Render видел "живой" сайт
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Mafia Server is Live and Running!'); // Теперь вместо 404 будет эта надпись
+    res.end('Mafia Game Server: Active');
 });
 
-// 2. Настраиваем Socket.io поверх этого сервера
-const io = new Server(server, {
-    cors: {
-        origin: "*", // Позволяет подключаться с любого сайта (твоего Mini App)
-        methods: ["GET", "POST"]
-    }
-});
+const io = new Server(server, { cors: { origin: "*" } });
 
 let rooms = {};
 
 io.on('connection', (socket) => {
-    console.log('Новый игрок подключился:', socket.id);
-
     socket.on('join_room', (data) => {
-        // Создаем ID комнаты: либо из ввода игрока, либо случайный, либо глобальный
-        let roomId = data.code ? data.code.toString() : null;
-        
-        if (data.mode === 'online') {
-            roomId = "GLOBAL_POOL";
-        } else if (!roomId) {
-            roomId = Math.floor(1000 + Math.random() * 9000).toString();
-        }
-
+        let roomId = data.code ? data.code.toString() : "GLOBAL";
         socket.join(roomId);
         socket.roomId = roomId;
-        socket.userName = data.name || "Аноним";
+        socket.userName = data.name || "Игрок";
 
-        // Инициализируем данные комнаты, если их нет
         if (!rooms[roomId]) {
-            rooms[roomId] = {
-                players: [],
-                limit: parseInt(data.limit) || 10
-            };
+            rooms[roomId] = { players: [], phase: 'lobby', limit: parseInt(data.limit) || 4 };
         }
 
-        // Добавляем игрока в список
-        rooms[roomId].players.push({ id: socket.id, name: socket.userName });
+        rooms[roomId].players.push({ id: socket.id, name: socket.userName, role: null, alive: true, canSelfHeal: true });
 
-        console.log(`Игрок ${socket.userName} вошел в ${roomId}. Всего: ${rooms[roomId].players.length}`);
-
-        // Отправляем всем в этой комнате обновленное количество игроков
         io.to(roomId).emit('update_lobby', {
             playersCount: rooms[roomId].players.length,
             limit: rooms[roomId].limit,
             roomId: roomId
         });
 
-        // Если комната заполнилась — начинаем игру
-        if (rooms[roomId].players.length >= rooms[roomId].limit) {
-            io.to(roomId).emit('start_game', { 
-                role: "Мирный житель",
-                msg: "Город засыпает... Игра началась!" 
-            });
+        // СТАРТ ИГРЫ
+        if (rooms[roomId].players.length >= rooms[roomId].limit && rooms[roomId].phase === 'lobby') {
+            rooms[roomId].phase = 'night';
+            assignRoles(roomId);
         }
     });
 
-    // Обработка сообщений чата
-    socket.on('chat', (data) => {
-        if (socket.roomId) {
-            io.to(socket.roomId).emit('chat_event', {
-                user: socket.userName,
-                text: data.text
+    // Раздача ролей
+    function assignRoles(roomId) {
+        let p = rooms[roomId].players;
+        let shuffled = p.sort(() => 0.5 - Math.random());
+        
+        shuffled[0].role = 'mafia';
+        shuffled[1].role = 'doctor';
+        shuffled[2].role = 'comisar';
+        for(let i=3; i<shuffled.length; i++) shuffled[i].role = 'citizen';
+
+        shuffled.forEach(player => {
+            io.to(player.id).emit('start_game', { 
+                role: player.role,
+                playersList: p.map(pl => ({name: pl.name, id: pl.id})) 
             });
-        }
-    });
+        });
+        
+        io.to(roomId).emit('chat_event', { type: 'sys', text: "Наступила ночь... Город засыпает." });
+    }
 
     // Обработка игровых действий
-    socket.on('action', (data) => {
-        if (socket.roomId) {
-            io.to(socket.roomId).emit('chat_event', {
-                type: 'sys',
-                text: `${socket.userName} ${data.text}`
-            });
+    socket.on('game_action', (data) => {
+        const room = rooms[socket.roomId];
+        const player = room.players.find(p => p.id === socket.id);
+        
+        let logText = "";
+        if (player.role === 'mafia') {
+            logText = data.action === 'kill' ? `Мафия выбрала цель.` : `Мафия скрылась в тенях.`;
+        } else if (player.role === 'doctor') {
+            if (data.target === socket.id) player.canSelfHeal = false;
+            logText = `Доктор выехал на вызов.`;
+        } else if (player.role === 'comisar') {
+            const target = room.players.find(p => p.id === data.target);
+            socket.emit('chat_event', { type: 'sys', text: `Результат проверки: ${target.name} — ${target.role}` });
+            logText = `Комиссар проверил одного из жителей.`;
         }
+
+        io.to(socket.roomId).emit('chat_event', { type: 'sys', text: logText });
     });
 
-    // Очистка при отключении
-    socket.on('disconnect', () => {
-        if (socket.roomId && rooms[socket.roomId]) {
-            rooms[socket.roomId].players = rooms[socket.roomId].players.filter(p => p.id !== socket.id);
-            
-            // Уведомляем остальных, что игрока меньше
-            io.to(socket.roomId).emit('update_lobby', {
-                playersCount: rooms[socket.roomId].players.length,
-                limit: rooms[socket.roomId].limit,
-                roomId: socket.roomId
-            });
-
-            // Удаляем комнату, если она пуста
-            if (rooms[socket.roomId].players.length === 0) {
-                delete rooms[socket.roomId];
-            }
-        }
-        console.log('Игрок ушел:', socket.id);
+    socket.on('chat', (data) => {
+        io.to(socket.roomId).emit('chat_event', { user: socket.userName, text: data.text });
     });
 });
 
-// 3. Запускаем сервер на порту, который выдает Render
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
-});
+server.listen(process.env.PORT || 3000);
