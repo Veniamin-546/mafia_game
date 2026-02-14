@@ -3,259 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MAFIA NOIR PREMIER</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        :root { 
-            --accent: #ff3b30; 
-            --gold: #ffcc00; 
-            --bg: #050505; 
-            --card: rgba(255, 255, 255, 0.05);
-            --glass: rgba(255, 255, 255, 0.08);
-        }
+        :root { --r: #ff3b30; --g: #ffcc00; --b: #050505; --card: rgba(255,255,255,0.07); }
+        body { margin: 0; background: var(--b); color: #fff; font-family: -apple-system, sans-serif; overflow: hidden; }
+        .screen { display: none; height: 100vh; flex-direction: column; padding: 25px; box-sizing: border-box; }
+        .active { display: flex; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        body { 
-            margin: 0; 
-            background: var(--bg); 
-            color: #fff; 
-            font-family: 'Montserrat', sans-serif; 
-            height: 100vh;
-            overflow: hidden;
-            background-image: radial-gradient(circle at top right, #1a0505, transparent);
-        }
+        h1 { text-align: center; color: var(--r); letter-spacing: 5px; font-weight: 900; }
+        .btn { padding: 18px; border-radius: 16px; border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; font-size: 13px; margin-bottom: 10px; }
+        .btn-red { background: var(--r); color: #fff; box-shadow: 0 5px 15px rgba(255,59,48,0.3); }
+        .btn-gold { background: var(--g); color: #000; font-weight: 900; }
+        .btn-glass { background: var(--card); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
 
-        .screen { 
-            display: none; 
-            height: 100vh; 
-            flex-direction: column; 
-            padding: 30px 20px; 
-            box-sizing: border-box; 
-        }
+        .card { background: var(--card); border-radius: 20px; padding: 15px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 15px; }
+        #chat { flex-grow: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+        .msg { background: rgba(255,255,255,0.05); padding: 10px 15px; border-radius: 15px; font-size: 14px; align-self: flex-start; }
+        .vip-border { border-left: 3px solid var(--g); }
 
-        .active { display: flex; animation: screenIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
-
-        @keyframes screenIn {
-            from { opacity: 0; transform: translateY(15px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-
-        /* Заголовок */
-        h1 { 
-            text-align: center; 
-            font-weight: 900; 
-            font-size: 48px; 
-            margin: 0; 
-            letter-spacing: -2px;
-            background: linear-gradient(to bottom, #fff, #666);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .subtitle {
-            text-align: center;
-            font-size: 10px;
-            letter-spacing: 4px;
-            color: var(--accent);
-            margin-top: -5px;
-            text-transform: uppercase;
-            font-weight: 700;
-        }
-
-        /* Кнопки */
-        .btn { 
-            padding: 20px; 
-            border-radius: 20px; 
-            border: none; 
-            font-weight: 800; 
-            cursor: pointer; 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            font-size: 13px; 
-            text-transform: uppercase; 
-            margin-bottom: 12px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .btn-main { 
-            background: var(--accent); 
-            color: #fff; 
-            box-shadow: 0 10px 20px rgba(255, 59, 48, 0.2);
-        }
-
-        .btn-gold { 
-            background: linear-gradient(45deg, #ffcc00, #ff9500); 
-            color: #000; 
-            box-shadow: 0 10px 20px rgba(255, 149, 0, 0.2);
-        }
-
-        .btn-glass { 
-            background: var(--glass); 
-            color: #fff; 
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .btn:active { transform: scale(0.96); opacity: 0.9; }
-
-        /* Карточки и поля */
-        .card { 
-            background: var(--card); 
-            border-radius: 25px; 
-            padding: 20px; 
-            border: 1px solid rgba(255,255,255,0.05); 
-            margin-bottom: 20px;
-            backdrop-filter: blur(15px);
-        }
-
-        input { 
-            background: rgba(0,0,0,0.3); 
-            border: 1px solid rgba(255,255,255,0.1); 
-            padding: 18px; 
-            border-radius: 15px; 
-            color: #fff; 
-            width: 100%; 
-            box-sizing: border-box; 
-            font-size: 16px; 
-            font-family: inherit;
-        }
-
-        /* Красивый поиск (Лобби) */
-        .lobby-ui {
-            margin: auto;
-            text-align: center;
-        }
-
-        .search-circle {
-            width: 120px;
-            height: 120px;
-            margin: 0 auto 30px;
-            border-radius: 50%;
-            border: 4px solid #1a1a1a;
-            border-top: 4px solid var(--accent);
-            animation: spin 1s linear infinite;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-
-        .search-circle::after {
-            content: attr(data-count);
-            position: absolute;
-            font-size: 32px;
-            font-weight: 900;
-            color: #fff;
-            transform: rotate(-360deg); /* чтобы цифра не крутилась */
-            animation: counterSpin 1s linear infinite;
-        }
-        @keyframes counterSpin { 100% { transform: rotate(-360deg); } }
-
-        /* Чат и игровые элементы */
-        #chat { 
-            flex-grow: 1; 
-            padding: 15px; 
-            overflow-y: auto; 
-            display: flex; 
-            flex-direction: column; 
-            gap: 10px;
-        }
-
-        .msg { 
-            background: var(--glass); 
-            padding: 12px 18px; 
-            border-radius: 20px 20px 20px 4px; 
-            font-size: 14px; 
-            max-width: 80%;
-            line-height: 1.4;
-        }
-
-        .msg-sys { background: none; color: var(--gold); border: none; align-self: center; text-align: center; font-weight: 700; font-size: 12px; }
-
-        .vip-badge { color: var(--gold); font-weight: 900; margin-right: 5px; }
-
+        /* Анимация Смерти */
+        #death-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; justify-content: center; align-items: center; flex-direction: column; }
+        .skull { font-size: 100px; animation: shake 0.5s infinite; }
+        @keyframes shake { 0% { transform: rotate(0); } 25% { transform: rotate(5deg); } 75% { transform: rotate(-5deg); } 100% { transform: rotate(0); } }
     </style>
 </head>
 <body>
 
+    <div id="death-screen">
+        <div class="skull">💀</div>
+        <h2 style="color:var(--r)">ВАС УБИЛИ</h2>
+        <button class="btn btn-glass" onclick="location.reload()">В МЕНЮ</button>
+    </div>
+
     <div id="scr-menu" class="screen active">
-        <div style="margin-top: 40px;">
-            <h1>MAFIA</h1>
-            <div class="subtitle">Premier Edition</div>
+        <h1>MAFIA</h1>
+        <div style="margin-top:auto">
+            <button class="btn btn-red" onclick="joinQ()">ИГРАТЬ</button>
+            <button class="btn btn-gold" onclick="showScreen('scr-shop')">STARS МАГАЗИН ⭐</button>
+            <button class="btn btn-glass" onclick="showScreen('scr-settings')">НАСТРОЙКИ</button>
         </div>
-
-        <div style="margin-top: auto;">
-            <button class="btn btn-main" onclick="startFind()">Найти матч</button>
-            <button class="btn btn-gold" onclick="showScreen('scr-shop')">VIP Магазин ⭐</button>
-            <button class="btn btn-glass" onclick="showScreen('scr-settings')">Настройки</button>
-        </div>
-    </div>
-
-    <div id="scr-settings" class="screen">
-        <h1 style="font-size: 24px;">PROFILE</h1>
-        <div class="card" style="margin-top: 40px;">
-            <label style="font-size: 10px; font-weight: 800; opacity: 0.5;">ВАШ ПСЕВДОНИМ</label>
-            <input type="text" id="name-in" style="margin-top: 10px;">
-        </div>
-        <button class="btn btn-main" onclick="saveSettings()">Сохранить профиль</button>
-        <button class="btn btn-glass" style="margin-top: auto;" onclick="showScreen('scr-menu')">Назад</button>
-    </div>
-
-    <div id="scr-lobby" class="screen">
-        <div class="lobby-ui">
-            <div class="search-circle" id="l-circle" data-count="1"></div>
-            <h2 style="font-weight: 900; margin-bottom: 5px;">ПОИСК ЦЕЛИ</h2>
-            <p style="opacity: 0.4; font-size: 12px;">Ожидаем игроков: <span id="l-status">1</span>/2</p>
-        </div>
-        <button class="btn btn-glass" onclick="location.reload()">Отменить поиск</button>
     </div>
 
     <div id="scr-shop" class="screen">
-        <h1>STARS</h1>
-        <div class="card" style="margin-top: 40px; text-align: center; border: 1px solid var(--gold);">
-            <div style="font-size: 40px; margin-bottom: 10px;">👑</div>
-            <h2 style="margin: 0; color: var(--gold); font-weight: 900;">VIP СТАТУС</h2>
-            <p style="opacity: 0.6; font-size: 12px; margin-bottom: 20px;">Золотой ник, корона в чате и приоритет в системе</p>
-            <button class="btn btn-gold" style="width: 100%; margin-bottom: 0;" onclick="payStars()">Купить за 500 ⭐</button>
+        <h1>SHOP</h1>
+        <div class="card" style="border:1px solid var(--r)">
+            <p>Шанс Мафии (+50%)</p>
+            <button class="btn btn-red" onclick="buy('m')">250 ⭐</button>
         </div>
-        <button class="btn btn-glass" style="margin-top: auto;" onclick="showScreen('scr-menu')">Назад</button>
+        <div class="card" style="border:1px solid var(--g)">
+            <p>VIP Статус (Корона)</p>
+            <button class="btn btn-gold" onclick="buy('v')">500 ⭐</button>
+        </div>
+        <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('scr-menu')">НАЗАД</button>
     </div>
 
-    <div id="scr-game" class="screen" style="padding: 15px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div id="g-role" style="background: var(--gold); color: #000; padding: 5px 15px; border-radius: 12px; font-weight: 900; font-size: 10px;">РОЛЬ: ???</div>
-            <div id="g-phase" style="color: var(--accent); font-weight: 900; font-size: 12px; text-transform: uppercase;">🌙 Ночь</div>
+    <div id="scr-settings" class="screen">
+        <h1>PROFILE</h1>
+        <div class="card">
+            <label>ИМЯ:</label>
+            <input type="text" id="name-in" style="width:100%; background:#000; border:1px solid #333; color:#fff; padding:15px; border-radius:10px; margin-top:10px;">
         </div>
+        <button class="btn btn-red" onclick="save()">СОХРАНИТЬ</button>
+        <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('scr-menu')">НАЗАД</button>
+    </div>
 
+    <div id="scr-lobby" class="screen">
+        <h1 style="color:var(--g)">ПОИСК...</h1>
+        <div style="margin:auto; text-align:center">
+            <div id="q-num" style="font-size:60px; font-weight:900">1</div>
+            <p>Игрока в очереди</p>
+        </div>
+        <button class="btn btn-glass" onclick="location.reload()">ОТМЕНА</button>
+    </div>
+
+    <div id="scr-game" class="screen">
+        <div style="display:flex; justify-content:space-between">
+            <span id="role-view" style="color:var(--g); font-weight:bold">РОЛЬ...</span>
+            <span id="phase-view" style="color:var(--r); font-weight:bold">🌙 НОЧЬ</span>
+        </div>
         <div id="chat"></div>
-
-        <div id="mafia-ui" style="display: none; padding-top: 10px;">
-            <button class="btn btn-main" style="width: 100%; border-radius: 15px;" onclick="socket.emit('action', curRoom)">Устранить цель</button>
+        
+        <div id="action-ui" class="card" style="display:none">
+            <p style="margin:0 0 10px; font-size:12px">ДЕЙСТВИЕ:</p>
+            <div id="targets"></div>
         </div>
 
-        <div style="display: flex; gap: 10px; padding-top: 10px;">
-            <input type="text" id="msg-in" placeholder="Написать сообщение..." style="margin: 0; border-radius: 18px; padding: 15px;">
-            <button class="btn btn-main" style="margin: 0; width: 60px; border-radius: 18px;" onclick="sendMsg()">📡</button>
+        <div style="display:flex; gap:10px">
+            <input type="text" id="msg-in" placeholder="..." style="flex-grow:1; background:#111; border:1px solid #333; color:#fff; padding:10px; border-radius:10px">
+            <button onclick="sendMsg()" style="background:var(--r); border:none; width:50px; border-radius:10px; color:#fff">📡</button>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.backgroundColor = "#050505";
-        tg.headerColor = "#050505";
-        
-        // !!! ЗАМЕНИ ЭТО НА СВОЮ ССЫЛКУ С RENDER !!!
-        const socket = io("https://mafia-game-skw7.onrender.com/"); 
+        const socket = io("https://ТВОЙ-СЕРВЕР.onrender.com");
+
+        let myData = {
+            name: localStorage.getItem('m_name') || "Игрок",
+            isVip: localStorage.getItem('m_vip') === 'true',
+            mafiaLuck: parseInt(localStorage.getItem('m_luck')) || 0
+        };
 
         let curRoom = "";
-        let myData = {
-            name: localStorage.getItem('m_name') || tg.initDataUnsafe?.user?.first_name || "Gamer",
-            isVip: localStorage.getItem('m_vip') === 'true'
-        };
+        let myRole = "";
+        let opps = [];
 
         document.getElementById('name-in').value = myData.name;
 
@@ -264,72 +117,85 @@
             document.getElementById(id).classList.add('active');
         }
 
-        function saveSettings() {
+        function save() {
             myData.name = document.getElementById('name-in').value;
             localStorage.setItem('m_name', myData.name);
-            tg.HapticFeedback.notificationOccurred('success');
             showScreen('scr-menu');
         }
 
-        function startFind() {
-            tg.HapticFeedback.impactOccurred('medium');
+        function buy(type) {
+            tg.showConfirm("Подтвердить оплату Stars?", (ok) => {
+                if(ok) {
+                    if(type === 'v') localStorage.setItem('m_vip', 'true');
+                    if(type === 'm') localStorage.setItem('m_luck', 1);
+                    tg.showAlert("Покупка прошла!");
+                    location.reload();
+                }
+            });
+        }
+
+        function joinQ() {
             showScreen('scr-lobby');
             socket.emit('join_queue', myData);
         }
 
-        socket.on('queue_status', (count) => {
-            document.getElementById('l-status').innerText = count;
-            document.getElementById('l-circle').setAttribute('data-count', count);
-        });
+        socket.on('queue_update', n => document.getElementById('q-num').innerText = n);
 
-        socket.on('start_game', (data) => {
-            curRoom = data.room;
-            tg.HapticFeedback.notificationOccurred('success');
+        socket.on('start_game', d => {
+            curRoom = d.room; myRole = d.role; opps = d.opponents;
             showScreen('scr-game');
-            document.getElementById('g-role').innerText = "РОЛЬ: " + data.role.toUpperCase();
-            if(data.role === 'мафия') document.getElementById('mafia-ui').style.display = 'block';
-            addMsg(`Игра началась! Твой противник: ${data.opp}`, true);
+            document.getElementById('role-view').innerText = myRole.toUpperCase();
+            setPhase('night');
         });
 
-        socket.on('to_day', () => {
-            document.getElementById('g-phase').innerText = "☀️ День";
-            document.getElementById('g-phase').style.color = "var(--gold)";
-            document.getElementById('mafia-ui').style.display = 'none';
-            tg.HapticFeedback.impactOccurred('heavy');
-            addMsg("Утро наступило. Обсудите, кто мафия!", true);
+        socket.on('change_phase', p => setPhase(p));
+
+        function setPhase(p) {
+            const pv = document.getElementById('phase-view');
+            const ui = document.getElementById('action-ui');
+            const ts = document.getElementById('targets');
+            
+            pv.innerText = p === 'night' ? "🌙 НОЧЬ" : "☀️ ДЕНЬ";
+            pv.style.color = p === 'night' ? "var(--r)" : "var(--g)";
+            
+            ts.innerHTML = "";
+            if(p === 'night' && myRole === 'mafia') {
+                ui.style.display = 'block';
+                opps.forEach(o => {
+                    ts.innerHTML += `<button class="btn btn-red" onclick="ability('${o.id}', '${o.name}')">УБИТЬ ${o.name}</button>`;
+                });
+            } else if (p === 'day') {
+                ui.style.display = 'block';
+                opps.forEach(o => {
+                    ts.innerHTML += `<button class="btn btn-glass" onclick="socket.emit('vote', '${o.id}')">КАЗНИТЬ ${o.name}</button>`;
+                });
+            } else { ui.style.display = 'none'; }
+        }
+
+        function ability(id, name) {
+            socket.emit('use_ability', { type: 'kill', targetId: id, targetName: name });
+        }
+
+        socket.on('sys_msg', m => {
+            const chat = document.getElementById('chat');
+            chat.innerHTML += `<div style="color:var(--g); text-align:center; font-size:12px; margin:10px 0">${m}</div>`;
+            if(m.includes("атакован") && myRole !== 'mafia') {
+                document.getElementById('death-screen').style.display = 'flex';
+            }
         });
 
-        socket.on('new_msg', (d) => {
-            addMsg(`<b>${d.user}:</b> ${d.text}`);
+        socket.on('new_msg', d => {
+            const chat = document.getElementById('chat');
+            chat.innerHTML += `<div class="msg ${d.isVip?'vip-border':''}"><b>${d.isVip?'👑':''} ${d.user}:</b> ${d.text}</div>`;
+            chat.scrollTop = chat.scrollHeight;
         });
 
         function sendMsg() {
             const i = document.getElementById('msg-in');
             if(i.value) {
-                socket.emit('message', { room: curRoom, user: myData.name, text: i.value });
+                socket.emit('message', { room: curRoom, user: myData.name, text: i.value, isVip: myData.isVip });
                 i.value = "";
             }
-        }
-
-        function addMsg(html, sys = false) {
-            const c = document.getElementById('chat');
-            const div = document.createElement('div');
-            div.className = sys ? "msg msg-sys" : "msg";
-            if(myData.isVip && !sys) div.style.borderLeft = "3px solid var(--gold)";
-            div.innerHTML = html;
-            c.appendChild(div);
-            c.scrollTop = c.scrollHeight;
-        }
-
-        function payStars() {
-            tg.showConfirm("Купить VIP за 500 Stars?", (ok) => {
-                if(ok) {
-                    localStorage.setItem('m_vip', 'true');
-                    myData.isVip = true;
-                    tg.showAlert("Поздравляем! VIP статус активирован 👑");
-                    location.reload();
-                }
-            });
         }
     </script>
 </body>
