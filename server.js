@@ -31,7 +31,7 @@ async function handleTelegramUpdates() {
                                 text: `Привет, ${firstName}! 👋\n\nЯ — движок Mafia Supreme. Заходи в наше Mini App и начинай игру!`,
                                 reply_markup: {
                                     inline_keyboard: [[
-                                        { text: "Играть в Мафию 🎭", url: `https://t.me/ТВОЙ_БОТ_ЮЗЕРНЕЙМ/app` }
+                                        { text: "Играть в Мафию 🎭", url: `https://mafia-game-skw7.onrender.com/` }
                                     ]]
                                 }
                             })
