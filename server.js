@@ -1,5 +1,9 @@
 const http = require('http');
 const { Server } = require('socket.io');
+const fetch = require('node-fetch'); // Установи через npm install node-fetch
+
+// --- НАСТРОЙКИ БОТА ---
+const BOT_TOKEN = 'ТВОЙ_ТОКЕН_ОТ_BOTFATHER'; // ВСТАВЬ СВОЙ ТОКЕН ТУТ
 
 const server = http.createServer((req, res) => {
     res.writeHead(200);
@@ -14,6 +18,46 @@ let rooms = {};
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
 
+    // --- ЛОГИКА ОПЛАТЫ TELEGRAM STARS ---
+    socket.on('create_invoice', async (data) => {
+        try {
+            const { type, amount } = data; // type: 'vip' или 'mafia_luck'
+            
+            // Формируем описание товара
+            const title = type === 'vip' ? "👑 PREMIUM VIP" : "🔪 ШАНС МАФИИ";
+            const description = type === 'vip' 
+                ? "Золотой статус, уникальная иконка и приоритет в очереди." 
+                : "Увеличивает шанс получить роль Мафии на 80%.";
+
+            // Генерация Invoice Link через Telegram API
+            const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: title,
+                    description: description,
+                    payload: `payment_${type}_${socket.id}`, // Технические данные платежа
+                    provider_token: "", // Для Stars поле пустое
+                    currency: "XTR", // Валюта - Telegram Stars
+                    prices: [{ label: "⭐ Stars", amount: amount }]
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.ok) {
+                // Отправляем ссылку на оплату обратно клиенту
+                socket.emit('invoice_ready', { url: result.result });
+            } else {
+                console.error('Bot API Error:', result);
+                socket.emit('sys_msg', 'Ошибка при создании платежа. Попробуйте позже.');
+            }
+        } catch (error) {
+            console.error('Payment Crash:', error);
+        }
+    });
+
+    // --- ЛОГИКА ИГРЫ И ПОДБОРА ---
     socket.on('join_queue', (userData) => {
         socket.userData = userData; 
         if (!queue.find(s => s.id === socket.id)) {
@@ -22,17 +66,14 @@ io.on('connection', (socket) => {
         
         io.emit('queue_size', queue.length);
 
-        // Начинаем игру, когда набралось 2 или более (для теста 2, для фулл логики 3+)
         if (queue.length >= 2) {
             const players = [queue.shift(), queue.shift()];
             const roomId = `room_${Date.now()}`;
             
-            // Распределение ролей с учетом покупных шансов
+            // Сортировка по купленным шансам (у кого больше mafiaLuck, тот мафия)
             players.sort((a, b) => (b.userData.mafiaLuck || 0) - (a.userData.mafiaLuck || 0));
             const mafia = players[0];
             const others = players.filter(p => p.id !== mafia.id);
-            
-            // Если игроков больше, можно выделить комиссара
             const comm = others.length > 0 ? others[0] : null;
 
             rooms[roomId] = {
@@ -69,23 +110,24 @@ io.on('connection', (socket) => {
 
         if (socket.role === 'mafia') {
             if (data.action === 'kill') {
-                io.to(socket.roomId).emit('game_event', { type: 'attack', victimId: data.targetId, victimName: data.targetName });
+                io.to(socket.roomId).emit('game_event', { 
+                    type: 'attack', 
+                    victimId: data.targetId, 
+                    victimName: data.targetName 
+                });
             } else {
-                socket.emit('sys_msg', 'Вы скрылись в тенях. Вас невозможно проверить этой ночью.');
+                socket.emit('sys_msg', 'Вы затаились. Проверки не обнаружат вас.');
             }
-        }
-
-        if (socket.role === 'comm') {
-            if (data.action === 'check') {
-                const target = io.sockets.sockets.get(data.targetId);
-                socket.emit('sys_msg', `Результат проверки ${data.targetName}: ${target.role === 'mafia' ? 'МАФИЯ 🚩' : 'МИРНЫЙ ✅'}`);
-            }
-        }
-
-        // Авто-переход в день после действия мафии (упрощенно)
-        if (socket.role === 'mafia') {
+            // Переключаем фазу
             room.phase = 'day';
             io.to(socket.roomId).emit('change_phase', 'day');
+        }
+
+        if (socket.role === 'comm' && data.action === 'check') {
+            // Ищем сокет цели
+            const targetSocket = [...io.sockets.sockets.values()].find(s => s.id === data.targetId);
+            const isMafia = targetSocket && targetSocket.role === 'mafia';
+            socket.emit('sys_msg', `Результат: ${data.targetName} - ${isMafia ? 'МАФИЯ 🚩' : 'МИРНЫЙ ✅'}`);
         }
     });
 
@@ -93,9 +135,9 @@ io.on('connection', (socket) => {
         const room = rooms[socket.roomId];
         if (room && room.phase === 'day') {
             room.votes[socket.id] = targetId;
-            io.to(socket.roomId).emit('sys_msg', `Голос принят.`);
+            io.to(socket.roomId).emit('sys_msg', `Голосование принято.`);
             
-            if (Object.keys(room.votes).length >= 1) { // Для теста - 1 голос решает
+            if (Object.keys(room.votes).length >= 1) { 
                 room.phase = 'night';
                 room.votes = {};
                 io.to(socket.roomId).emit('change_phase', 'night');
