@@ -1,14 +1,14 @@
 {
-  "name": "mafia-game",
+  "name": "mafia-server",
   "version": "1.0.0",
-  "description": "Mafia Telegram Game",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.7.2",
-    "node-telegram-bot-api": "^0.64.0"
+    "node-telegram-bot-api": "^0.64.0",
+    "node-fetch": "^2.6.7"
   }
 }
