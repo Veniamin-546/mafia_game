@@ -166,23 +166,43 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- УНИВЕРСАЛЬНЫЙ ЗАПУСК ИГРЫ (ОБНОВЛЕНО ДЛЯ РОЛЕЙ) ---
+    // --- УНИВЕРСАЛЬНЫЙ ЗАПУСК ИГРЫ (ОБНОВЛЕНО С VIP ШАНСАМИ) ---
     function startGameForRoom(roomId) {
         const room = rooms[roomId];
+        if (!room) return;
+
         const playersSockets = room.players.map(id => io.sockets.sockets.get(id)).filter(s => s);
         
-        // 1. Сортировка по шансам (VIP/Luck)
-        playersSockets.sort((a, b) => (b.userData.mafiaLuck || 0) - (a.userData.mafiaLuck || 0));
+        // --- ЛОГИКА ШАНСОВ VIP ---
+        // Сортируем игроков по "весу" их шансов. Чем выше вес, тем выше они в списке на получение роли.
+        playersSockets.sort((a, b) => {
+            const getWeight = (s) => {
+                let weight = 0;
+                // Добавляем шанс от купленной удачи (Luck)
+                weight += (s.userData.mafiaLuck || 0);
+                weight += (s.userData.commLuck || 0);
+                
+                // Если есть VIP, добавляем веса согласно условиям (40+50+60+100)
+                if (s.userData.isVip) {
+                    weight += 250; // Базовый VIP приоритет (сумма всех шансов спец-ролей)
+                }
+                return weight;
+            };
+            return getWeight(b) - getWeight(a);
+        });
         
-        // 2. Распределение (в зависимости от кол-ва игроков)
-        // Мафия всегда [0], Комиссар [1], Доктор [2] (если игроков > 3)
+        // Распределение (в зависимости от кол-ва игроков)
+        // После сортировки по весу, VIP чаще будут попадать в первые индексы [0, 1, 2]
         playersSockets.forEach((p, idx) => {
             p.isAlive = true;
-            if (idx === 0) p.role = 'mafia';
-            else if (idx === 1) p.role = 'comm';
-            else if (idx === 2 && playersSockets.length > 3) p.role = 'doc';
-            else p.role = 'citizen';
+            if (idx === 0) p.role = 'mafia'; // 40% шанс у VIP (через приоритет в списке)
+            else if (idx === 1) p.role = 'comm'; // 50% шанс у VIP
+            else if (idx === 2 && playersSockets.length > 3) p.role = 'doc'; // 60% шанс у VIP
+            else p.role = 'citizen'; // Для VIP житель 100%, если не попал на роли выше
         });
+
+        // Перемешиваем массив для фронтенда, чтобы по порядку в списке не узнали мафию
+        const frontendPlayers = [...playersSockets].sort(() => Math.random() - 0.5);
 
         room.phase = 'night';
         room.activeRole = 'mafia';
@@ -195,7 +215,7 @@ io.on('connection', (socket) => {
                 myId: p.id,
                 phase: 'night',
                 activeRole: 'mafia',
-                players: playersSockets.map(pl => ({ 
+                players: frontendPlayers.map(pl => ({ 
                     id: pl.id, 
                     name: pl.userData.name, 
                     isVip: pl.userData.isVip,
