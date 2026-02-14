@@ -1,152 +1,133 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MAFIA STARS</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        :root { --red: #ff3b30; --gold: #ffcc00; --bg: #0a0a0c; --card: #1c1c1e; }
-        body { margin: 0; background: var(--bg); color: white; font-family: -apple-system, sans-serif; }
-        .screen { display: none; height: 100vh; flex-direction: column; padding: 20px; box-sizing: border-box; }
+        :root { --r: #ff3b30; --g: #ffcc00; --b: #000; }
+        body { margin: 0; background: var(--b); color: #fff; font-family: sans-serif; overflow: hidden; }
+        .screen { display: none; height: 100vh; flex-direction: column; padding: 25px; box-sizing: border-box; }
         .active { display: flex; }
-
-        /* Дизайн лобби */
-        .lobby-counter { font-size: 48px; font-weight: bold; color: var(--gold); text-align: center; margin: 20px 0; }
-        .loader { width: 100%; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
-        .progress { width: 50%; height: 100%; background: var(--red); transition: 0.5s; }
-
-        .btn { padding: 18px; border-radius: 16px; border: none; font-weight: bold; width: 100%; cursor: pointer; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; }
-        .btn-red { background: var(--red); color: white; }
-        .btn-gold { background: linear-gradient(45deg, #ffcc00, #ff9500); color: black; }
         
-        #chat { flex-grow: 1; overflow-y: auto; background: rgba(255,255,255,0.03); border-radius: 20px; padding: 15px; margin-bottom: 15px; }
-        .msg { margin-bottom: 8px; font-size: 14px; }
-        .vip-name { color: var(--gold); font-weight: bold; }
-        input { background: #2c2c2e; border: 1px solid #3a3a3c; padding: 15px; border-radius: 12px; color: white; width: 100%; box-sizing: border-box; }
+        .btn { padding: 18px; border-radius: 15px; border: none; font-weight: bold; width: 100%; margin-bottom: 10px; cursor: pointer; }
+        .btn-red { background: var(--r); color: #fff; }
+        .btn-gold { background: var(--g); color: #000; }
+        .btn-glass { background: #1c1c1e; color: #fff; border: 1px solid #333; }
+
+        #chat { flex-grow: 1; overflow-y: auto; background: #111; border-radius: 15px; padding: 15px; margin-bottom: 10px; border: 1px solid #222; }
+        input { background: #1c1c1e; border: 1px solid #333; padding: 15px; border-radius: 10px; color: #fff; width: 100%; box-sizing: border-box; }
+        
+        .match-info { text-align: center; font-size: 24px; margin-top: 40px; color: var(--g); }
     </style>
 </head>
 <body>
 
     <div id="scr-menu" class="screen active">
-        <h1 style="text-align:center; color:var(--red); letter-spacing:5px">MAFIA</h1>
+        <h1 style="text-align:center; color:var(--r); font-size:40px; margin:0">MAFIA</h1>
+        <p style="text-align:center; opacity:0.5">Stars Edition</p>
         <div style="margin-top:auto">
-            <button class="btn btn-red" onclick="startSearch()">ИГРАТЬ</button>
-            <button class="btn btn-gold" onclick="showScreen('scr-shop')">VIP МАГАЗИН ⭐</button>
-            <button class="btn btn-glass" onclick="showScreen('scr-settings')" style="color:white; background:rgba(255,255,255,0.1)">НАСТРОЙКИ</button>
+            <button class="btn btn-red" onclick="startSearch()">ИГРАТЬ (ПОИСК)</button>
+            <button class="btn btn-gold" onclick="showScreen('scr-shop')">МАГАЗИН ⭐</button>
+            <button class="btn btn-glass" onclick="showScreen('scr-settings')">НАСТРОЙКИ</button>
         </div>
     </div>
 
     <div id="scr-lobby" class="screen">
-        <h1 style="text-align:center">ПОИСК ИГРОКОВ</h1>
-        <div class="lobby-counter"><span id="q-count">1</span>/2</div>
-        <div class="loader"><div class="progress" id="q-progress"></div></div>
-        <p style="text-align:center; opacity:0.5; margin-top:20px">Ищем оппонентов для битвы...</p>
-        <button class="btn btn-glass" style="margin-top:auto; color:white" onclick="location.reload()">ОТМЕНА</button>
+        <h1>ПОИСК...</h1>
+        <div class="match-info"><span id="q-count">0</span> / 2</div>
+        <p style="text-align:center; opacity:0.6">Ждем еще одного игрока</p>
+        <button class="btn btn-glass" style="margin-top:auto" onclick="location.reload()">ОТМЕНА</button>
     </div>
 
     <div id="scr-shop" class="screen">
-        <h1>STARS SHOP</h1>
-        <div style="background:var(--card); padding:20px; border-radius:20px; text-align:center; border: 1px solid var(--gold)">
-            <h2 style="color:var(--gold)">VIP STATUS 👑</h2>
-            <p>Уникальные иконки и золотой ник</p>
-            <button class="btn btn-gold" onclick="payWithStars()">КУПИТЬ (500 ⭐)</button>
+        <h1>SHOP</h1>
+        <div style="background:#1c1c1e; padding:20px; border-radius:20px; border:1px solid var(--g); text-align:center">
+            <h2 style="color:var(--g)">VIP PASS 👑</h2>
+            <p>Золотой статус и корона</p>
+            <button class="btn btn-gold" onclick="payStars()">КУПИТЬ 500 ⭐</button>
         </div>
-        <button class="btn btn-glass" style="margin-top:auto; color:white" onclick="showScreen('scr-menu')">НАЗАД</button>
+        <button class="btn btn-glass" style="margin-top:auto" onclick="showScreen('scr-menu')">НАЗАД</button>
     </div>
 
     <div id="scr-game" class="screen">
         <div style="display:flex; justify-content:space-between; margin-bottom:10px">
-            <b id="role-text" style="color:var(--gold)">...</b>
-            <b id="phase-text" style="color:var(--red)">НОЧЬ</b>
+            <b id="role-tag" style="color:var(--g)">???</b>
+            <b id="phase-tag" style="color:var(--r)">НОЧЬ</b>
         </div>
         <div id="chat"></div>
-        <div id="mafia-ui" style="display:none">
-            <button class="btn btn-red" onclick="mafiaHit()">УБИТЬ ИГРОКА</button>
+        <div id="action-ui" style="display:none">
+            <button class="btn btn-red" onclick="socket.emit('night_action', myRoom)">УБИТЬ</button>
         </div>
         <div style="display:flex; gap:10px">
-            <input type="text" id="chat-in" placeholder="Сообщение...">
-            <button onclick="sendChat()" style="background:var(--red); border:none; width:60px; border-radius:12px; color:white">📡</button>
+            <input type="text" id="chat-in" placeholder="Чат...">
+            <button onclick="sendMsg()" style="background:var(--r); border:none; width:60px; border-radius:10px">📡</button>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        const socket = io("ТВОЯ_ССЫЛКА_НА_RENDER");
+        const socket = io("https://ТВОЙ-СЕРВЕР.render.com"); // ЗАМЕНИТЬ
         
-        let user = {
-            name: localStorage.getItem('m_name') || tg.initDataUnsafe?.user?.first_name || "Игрок",
-            isVip: localStorage.getItem('m_vip') === 'true',
-            vipIcon: localStorage.getItem('m_icon') || "👑"
-        };
+        let myName = localStorage.getItem('n') || "Player";
+        let isVip = localStorage.getItem('v') === 'true';
+        let myRoom = "";
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
         }
 
-        // --- ЛОГИКА ПОДБОРА ---
         function startSearch() {
             showScreen('scr-lobby');
-            socket.emit('find_match', user);
+            socket.emit('find_match', { name: myName, isVip: isVip });
         }
 
         socket.on('queue_update', (count) => {
             document.getElementById('q-count').innerText = count;
-            document.getElementById('q-progress').style.width = (count / 2 * 100) + "%";
         });
 
         socket.on('match_found', (data) => {
+            myRoom = data.room;
             showScreen('scr-game');
-            document.getElementById('role-text').innerText = data.role.toUpperCase();
-            if(data.role === 'mafia') document.getElementById('mafia-ui').style.display = 'block';
-            addMsg(`Система: Игра началась! Ваш враг: ${data.oppName}`, true);
+            const me = data.players.find(p => p.id === socket.id);
+            document.getElementById('role-tag').innerText = "РОЛЬ: " + me.role.toUpperCase();
+            if(me.role === 'mafia') document.getElementById('action-ui').style.display = 'block';
         });
 
-        // --- ОПЛАТА ЗВЕЗДАМИ ---
-        function payWithStars() {
-            // ВАЖНО: Telegram Stars требует invoice_url от вашего бота.
-            // Если у вас нет бэкенда для счетов, tg.openInvoice не сработает.
-            // Но мы используем новый метод для Stars:
-            
-            tg.showConfirm("Вы хотите купить VIP за 500 Stars?", (ok) => {
-                if(ok) {
-                    // В реальном приложении здесь: 
-                    // fetch('/create-invoice').then(res => tg.openInvoice(res.url))
-                    
-                    // Для теста активируем VIP:
-                    localStorage.setItem('m_vip', 'true');
-                    user.isVip = true;
-                    tg.showAlert("Оплата (тест) прошла! VIP активирован 👑");
-                    location.reload();
-                }
-            });
-        }
-
-        // --- ИГРОВАЯ ЛОГИКА ---
         socket.on('phase_day', () => {
-            document.getElementById('phase-text').innerText = "ДЕНЬ";
-            document.getElementById('phase-text').style.color = "var(--gold)";
-            document.getElementById('mafia-ui').style.display = 'none';
-            addMsg("Система: Солнце взошло. Город проснулся!", true);
+            document.getElementById('phase-tag').innerText = "ДЕНЬ";
+            document.getElementById('phase-tag').style.color = "var(--g)";
+            document.getElementById('action-ui').style.display = 'none';
         });
 
         socket.on('chat_msg', (d) => {
             const chat = document.getElementById('chat');
-            chat.innerHTML += `<div class="msg"><b class="${d.isVip?'vip-name':''}">${d.user}:</b> ${d.text}</div>`;
+            chat.innerHTML += `<div><b>${d.user}:</b> ${d.text}</div>`;
             chat.scrollTop = chat.scrollHeight;
         });
 
-        function mafiaHit() { socket.emit('night_action'); }
-        function sendChat() {
-            const inp = document.getElementById('chat-in');
-            if(inp.value) { socket.emit('send_chat', inp.value); inp.value = ""; }
+        function sendMsg() {
+            const i = document.getElementById('chat-in');
+            if(i.value) {
+                socket.emit('send_chat', { roomId: myRoom, name: myName, text: i.value, isVip: isVip });
+                i.value = "";
+            }
         }
 
-        function addMsg(text, isSys) {
-            const chat = document.getElementById('chat');
-            chat.innerHTML += `<div class="msg" style="${isSys?'color:var(--gold);text-align:center':''}">${text}</div>`;
+        // ОПЛАТА STARS
+        function payStars() {
+            // Для реальных Stars бот должен отправить Invoice.
+            // Пока имитируем покупку, так как без бэкенда бота Invoice не создать.
+            tg.showConfirm("Купить VIP за 500 Stars?", (ok) => {
+                if(ok) {
+                    localStorage.setItem('v', 'true');
+                    isVip = true;
+                    tg.showAlert("Успешно! Теперь вы VIP.");
+                    location.reload();
+                }
+            });
         }
     </script>
 </body>
