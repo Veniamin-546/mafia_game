@@ -3,7 +3,54 @@ const { Server } = require('socket.io');
 const fetch = require('node-fetch'); // Установи через npm install node-fetch
 
 // --- НАСТРОЙКИ БОТА ---
-const BOT_TOKEN = '8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM'; // ВСТАВЬ СВОЙ ТОКЕН ТУТ
+const BOT_TOKEN = process.env.BOT_TOKEN || '8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM'; 
+
+// --- НОВАЯ ЛОГИКА: ОБРАБОТКА ТЕЛЕГРАМ-СООБЩЕНИЙ ---
+let lastUpdateId = 0;
+async function handleTelegramUpdates() {
+    try {
+        const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=10`);
+        const data = await response.json();
+        
+        if (data.ok && data.result.length > 0) {
+            for (const update of data.result) {
+                lastUpdateId = update.update_id;
+                
+                // Если пришло текстовое сообщение
+                if (update.message && update.message.text) {
+                    const chatId = update.message.chat.id;
+                    const text = update.message.text;
+                    const firstName = update.message.from.first_name;
+
+                    if (text === '/start') {
+                        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                chat_id: chatId,
+                                text: `Привет, ${firstName}! 👋\n\nЯ — движок Mafia Supreme. Заходи в наше Mini App и начинай игру!`,
+                                reply_markup: {
+                                    inline_keyboard: [[
+                                        { text: "Играть в Мафию 🎭", url: `https://t.me/ТВОЙ_БОТ_ЮЗЕРНЕЙМ/app` }
+                                    ]]
+                                }
+                            })
+                        });
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        // Ошибки игнорируем, чтобы сервер не падал при сбоях сети
+    }
+    // Рекурсивный вызов для постоянной работы
+    setTimeout(handleTelegramUpdates, 1000);
+}
+
+// Запускаем бота
+handleTelegramUpdates();
+
+// --- ВАШ ТЕКУЩИЙ КОД БЕЗ ИЗМЕНЕНИЙ ---
 
 const server = http.createServer((req, res) => {
     res.writeHead(200);
