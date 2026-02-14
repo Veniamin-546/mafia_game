@@ -129,7 +129,6 @@
             backdrop-filter: blur(10px);
         }
 
-        /* --- НОВЫЕ СТИЛИ --- */
         .purchased-badge { color: var(--green) !important; font-weight: 800; font-size: 10px; text-transform: uppercase; margin-top: 5px; display: block; }
         option:disabled { color: #555; }
     </style>
@@ -142,9 +141,34 @@
         <h1>MAFIA</h1>
         <div class="subtitle">Shadow of Justice</div>
         <div class="btn-group">
-            <button class="btn btn-primary" onclick="enterQueue()">НАЧАТЬ ИГРУ</button>
+            <button class="btn btn-primary" onclick="enterQueue()">ОНЛАЙН ИГРА (10/10)</button>
+            <button class="btn btn-secondary" onclick="showScreen('scr-local-menu')">С ДРУЗЬЯМИ (ЛОКАЛЬНО)</button>
             <button class="btn btn-gold" onclick="showScreen('scr-shop')">МАГАЗИН ⭐</button>
             <button class="btn btn-secondary" onclick="showScreen('scr-settings')">НАСТРОЙКИ</button>
+        </div>
+    </div>
+
+    <div id="scr-local-menu" class="screen">
+        <h1>LOCAL</h1>
+        <div class="subtitle">Приватная комната</div>
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="createRoom()">СОЗДАТЬ ЛОББИ</button>
+            <div class="card" style="margin-top: 10px;">
+                <input type="text" id="inp-room-id" placeholder="КОД КОМНАТЫ" style="text-align: center; text-transform: uppercase;">
+                <button class="btn btn-secondary" style="margin-top:10px; width:100%" onclick="joinRoom()">ВОЙТИ ПО КОДУ</button>
+            </div>
+            <button class="btn btn-secondary" onclick="showScreen('scr-menu')">НАЗАД</button>
+        </div>
+    </div>
+
+    <div id="scr-local-lobby" class="screen">
+        <h1 id="local-room-code" style="color: var(--gold); font-size: 32px;">CODE: ---</h1>
+        <div class="subtitle">Ожидание игроков...</div>
+        <div class="card" id="local-player-list" style="flex-grow:1; font-size:14px; overflow-y: auto;">
+            </div>
+        <div class="btn-group">
+            <button id="start-btn-local" class="btn btn-primary" style="display:none" onclick="startLocalGame()">НАЧАТЬ</button>
+            <button class="btn btn-secondary" onclick="location.reload()">ВЫЙТИ</button>
         </div>
     </div>
 
@@ -197,7 +221,7 @@
     <div id="scr-lobby" class="screen">
         <div class="search-container" style="margin: auto; text-align: center;">
             <div class="radar"></div>
-            <h2 id="lobby-count">1 / 2</h2>
+            <h2 id="lobby-count">1 / 10</h2>
             <p style="opacity: 0.5;">Ищем игроков...</p>
         </div>
         <button class="btn btn-secondary" onclick="location.reload()">ОТМЕНА</button>
@@ -271,6 +295,7 @@
         let myId = "";
         let playerList = [];
         let isAlive = true;
+        let currentRoomId = null;
 
         document.getElementById('inp-name').value = user.name;
         document.getElementById('inp-icon').value = user.vipIcon;
@@ -279,7 +304,6 @@
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
 
-            // --- ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА VIP ПРИ ВХОДЕ В НАСТРОЙКИ ---
             if (id === 'scr-settings') {
                 const select = document.getElementById('inp-icon');
                 const vipLabel = document.getElementById('vip-status-text');
@@ -297,7 +321,6 @@
                 }
             }
 
-            // --- ВИЗУАЛИЗАЦИЯ КУПЛЕННОГО В МАГАЗИНЕ ---
             if (id === 'scr-shop') {
                 if(user.isVip) markAsPurchased('vip-check');
                 if(user.mafiaLuck > 0) markAsPurchased('luck-m-check');
@@ -314,13 +337,10 @@
 
         function saveSettings() {
             const selectedIcon = document.getElementById('inp-icon').value;
-            
-            // Защита от выбора иконки без VIP
             if (!user.isVip && selectedIcon !== "") {
                 tg.showAlert("Иконки доступны только для VIP!");
                 return;
             }
-
             user.name = document.getElementById('inp-name').value;
             user.vipIcon = selectedIcon;
             localStorage.setItem('m_name', user.name);
@@ -329,15 +349,55 @@
             showScreen('scr-menu');
         }
 
+        // --- ОНЛАЙН ИГРА ---
         function enterQueue() {
             showScreen('scr-lobby');
             socket.emit('join_queue', user);
         }
 
         socket.on('queue_size', count => {
-            document.getElementById('lobby-count').innerText = `${count} / 2`;
+            document.getElementById('lobby-count').innerText = `${count} / 10`;
         });
 
+        // --- ЛОКАЛЬНАЯ ИГРА ---
+        function createRoom() {
+            socket.emit('create_room', user);
+        }
+
+        function joinRoom() {
+            const code = document.getElementById('inp-room-id').value.toUpperCase();
+            if(!code) return tg.showAlert("Введите код!");
+            socket.emit('join_room', { roomId: code, userData: user });
+        }
+
+        function startLocalGame() {
+            socket.emit('start_local_game', currentRoomId);
+        }
+
+        socket.on('room_created', data => {
+            currentRoomId = data.roomId;
+            showScreen('scr-local-lobby');
+            document.getElementById('local-room-code').innerText = "CODE: " + data.roomId;
+            document.getElementById('start-btn-local').style.display = 'block';
+            updateLocalPlayers(data.players);
+        });
+
+        socket.on('room_update', data => {
+            showScreen('scr-local-lobby');
+            updateLocalPlayers(data.players);
+        });
+
+        function updateLocalPlayers(players) {
+            const list = document.getElementById('local-player-list');
+            list.innerHTML = players.map(p => `
+                <div style="padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+                    <span>${p.isVip ? p.vipIcon : '👤'} ${p.name}</span>
+                    <span style="opacity:0.5; font-size:10px;">${p.isHost ? 'HOST' : 'READY'}</span>
+                </div>
+            `).join('');
+        }
+
+        // --- ИГРОВАЯ ЛОГИКА ---
         socket.on('start_game', data => {
             myRole = data.role;
             myId = data.myId;
@@ -400,38 +460,29 @@
         }
 
         function abilityAction(action, tid, tname) {
-            if(!socket.connected) return tg.showAlert("Связь с сервером прервана!");
             socket.emit('night_action', { action, targetId: tid, targetName: tname });
             document.querySelectorAll('.action-tray').forEach(t => t.style.display = 'none');
             addMsg("Выбор сделан: " + (tname || "пропуск"), true);
         }
 
         function voteAction(tid) {
-            if(!socket.connected) return tg.showAlert("Связь с сервером прервана!");
             socket.emit('submit_vote', tid);
             document.getElementById('vote-ui').style.display = 'none';
             addMsg("Голос засчитан.", true);
         }
 
         function initStarsPayment(type, amount) {
-            if(!socket.connected) return tg.showAlert("Сервер не отвечает");
             socket.emit('create_invoice', { type, amount });
             addMsg("Запрос счета на " + amount + " ⭐...", true);
         }
 
         socket.on('invoice_ready', (data) => {
-            if(!data.url) return tg.showAlert("Ошибка генерации ссылки");
             tg.openInvoice(data.url, (status) => {
                 if (status === 'paid') {
                     if (data.type.includes('vip')) localStorage.setItem('m_vip', 'true');
                     if (data.type === 'luck_m') localStorage.setItem('m_luck_m', '100');
                     if (data.type === 'luck_c') localStorage.setItem('m_luck_c', '100');
-                    
-                    tg.showConfirm("Оплата принята! Перезагрузить для активации?", (ok) => {
-                        if(ok) location.reload();
-                    });
-                } else {
-                    tg.showAlert("Оплата не была завершена");
+                    tg.showConfirm("Оплата принята! Перезагрузить?", (ok) => { if(ok) location.reload(); });
                 }
             });
         });
@@ -455,7 +506,7 @@
 
         socket.on('game_event', data => {
             if (data.type === 'attack') {
-                addMsg(`Ночная сводка: атакован игрок ${data.victimName}.`, true);
+                addMsg(`Ночная сводка: атакован ${data.victimName}.`, true);
                 if (data.victimId === myId) {
                     isAlive = false;
                     document.getElementById('death-overlay').style.display = 'flex';
@@ -469,11 +520,9 @@
             document.getElementById('win-title').innerText = data.winner === 'mafia' ? "ПОБЕДА МАФИИ" : "ПОБЕДА МИРНЫХ";
         });
 
-        // --- ФИЛЬТР СИСТЕМНЫХ СООБЩЕНИЙ ОБ ОПЛАТЕ ---
         socket.on('sys_msg', m => {
-            const filters = ['счет', 'оплата', 'invoice', 'звезды', 'stars', 'чек'];
-            const isTechnical = filters.some(word => m.toLowerCase().includes(word));
-            if(!isTechnical) addMsg(m, true);
+            const filters = ['счет', 'оплата', 'invoice', 'звезды', 'stars'];
+            if(!filters.some(word => m.toLowerCase().includes(word))) addMsg(m, true);
         });
 
         function addMsg(text, isSys) {
@@ -484,10 +533,6 @@
             flow.appendChild(div);
             flow.scrollTop = flow.scrollHeight;
         }
-
-        socket.on('connect_error', () => {
-            console.error("Connection Lost");
-        });
     </script>
 </body>
 </html>
