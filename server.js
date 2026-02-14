@@ -1,124 +1,115 @@
 const http = require('http');
 const { Server } = require('socket.io');
+const axios = require('axios'); // Нужно установить: npm install axios
 
-const server = http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end('MAFIA_SUPREME_ENGINE_RUNNING');
-});
-
+const BOT_TOKEN = 'ТВОЙ_ТОКЕН_БОТА'; // Вставь сюда токен от BotFather
+const server = http.createServer((req, res) => { res.end('MAFIA_V6_ENGINE'); });
 const io = new Server(server, { cors: { origin: "*" } });
 
 let queue = [];
 let rooms = {};
 
 io.on('connection', (socket) => {
-    console.log('New connection:', socket.id);
+    // --- ОПЛАТА STARS ---
+    socket.on('create_stars_invoice', async (data) => {
+        try {
+            const title = data.type === 'vip' ? "VIP Статус" : "Шанс Мафии";
+            const description = "Поддержите игру и получите бонусы!";
+            const payload = `${data.type}_${socket.id}`;
+            const currency = "XTR"; // Код для Telegram Stars
 
+            const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
+                title: title,
+                description: description,
+                payload: payload,
+                provider_token: "", // Пусто для Stars
+                currency: currency,
+                prices: [{ label: "Цена", amount: data.amount }]
+            });
+
+            if (response.data.ok) {
+                socket.emit('invoice_link', response.data.result);
+            }
+        } catch (e) { console.error('Payment error', e); }
+    });
+
+    // --- ПОДБОР ---
     socket.on('join_queue', (userData) => {
-        socket.userData = userData; 
-        if (!queue.find(s => s.id === socket.id)) {
-            queue.push(socket);
-        }
-        
+        socket.userData = userData;
+        if (!queue.find(s => s.id === socket.id)) queue.push(socket);
         io.emit('queue_size', queue.length);
 
-        // Начинаем игру, когда набралось 2 или более (для теста 2, для фулл логики 3+)
-        if (queue.length >= 2) {
-            const players = [queue.shift(), queue.shift()];
+        if (queue.length >= 3) { // Для игры нужны минимум 3 (Мафия, Доктор, Комиссар)
+            const players = [queue.shift(), queue.shift(), queue.shift()];
             const roomId = `room_${Date.now()}`;
             
-            // Распределение ролей с учетом покупных шансов
-            players.sort((a, b) => (b.userData.mafiaLuck || 0) - (a.userData.mafiaLuck || 0));
-            const mafia = players[0];
-            const others = players.filter(p => p.id !== mafia.id);
-            
-            // Если игроков больше, можно выделить комиссара
-            const comm = others.length > 0 ? others[0] : null;
-
-            rooms[roomId] = {
-                players: players.map(p => p.id),
-                phase: 'night',
-                votes: {},
-                actionsDone: 0
+            rooms[roomId] = { 
+                id: roomId, 
+                players: players, 
+                phase: 'night', 
+                actions: {}, 
+                aliveCount: 3 
             };
 
-            players.forEach(p => {
+            // Роли
+            const roles = ['mafia', 'doctor', 'comm'];
+            roles.sort(() => Math.random() - 0.5);
+
+            players.forEach((p, i) => {
                 p.join(roomId);
                 p.roomId = roomId;
-                p.role = (p.id === mafia.id) ? 'mafia' : (comm && p.id === comm.id ? 'comm' : 'citizen');
+                p.role = roles[i];
                 p.isAlive = true;
-
                 p.emit('start_game', {
                     room: roomId,
                     role: p.role,
-                    myId: p.id,
-                    players: players.map(pl => ({ 
-                        id: pl.id, 
-                        name: pl.userData.name, 
-                        isVip: pl.userData.isVip,
-                        vipIcon: pl.userData.vipIcon 
-                    }))
+                    players: players.map(pl => ({ id: pl.id, name: pl.userData.name }))
                 });
+            });
+        }
+    });
+
+    // --- ЛОГИКА ИГРЫ (ЧАТ И ХОДЫ) ---
+    socket.on('send_msg', (text) => {
+        if (socket.roomId) {
+            io.to(socket.roomId).emit('new_msg', { 
+                user: socket.userData.name, 
+                text: text, 
+                isVip: socket.userData.isVip 
             });
         }
     });
 
     socket.on('night_action', (data) => {
         const room = rooms[socket.roomId];
-        if (!room || room.phase !== 'night') return;
+        if (!room) return;
 
-        if (socket.role === 'mafia') {
-            if (data.action === 'kill') {
-                io.to(socket.roomId).emit('game_event', { type: 'attack', victimId: data.targetId, victimName: data.targetName });
-            } else {
-                socket.emit('sys_msg', 'Вы скрылись в тенях. Вас невозможно проверить этой ночью.');
-            }
+        room.actions[socket.role] = { targetId: data.targetId, type: data.type };
+
+        // Если все походили (Мафия, Доктор, Комиссар)
+        if (Object.keys(room.actions).length === room.aliveCount) {
+            processNight(room);
         }
-
-        if (socket.role === 'comm') {
-            if (data.action === 'check') {
-                const target = io.sockets.sockets.get(data.targetId);
-                socket.emit('sys_msg', `Результат проверки ${data.targetName}: ${target.role === 'mafia' ? 'МАФИЯ 🚩' : 'МИРНЫЙ ✅'}`);
-            }
-        }
-
-        // Авто-переход в день после действия мафии (упрощенно)
-        if (socket.role === 'mafia') {
-            room.phase = 'day';
-            io.to(socket.roomId).emit('change_phase', 'day');
-        }
-    });
-
-    socket.on('submit_vote', (targetId) => {
-        const room = rooms[socket.roomId];
-        if (room && room.phase === 'day') {
-            room.votes[socket.id] = targetId;
-            io.to(socket.roomId).emit('sys_msg', `Голос принят.`);
-            
-            if (Object.keys(room.votes).length >= 1) { // Для теста - 1 голос решает
-                room.phase = 'night';
-                room.votes = {};
-                io.to(socket.roomId).emit('change_phase', 'night');
-            }
-        }
-    });
-
-    socket.on('send_msg', (msg) => {
-        if (socket.roomId) {
-            io.to(socket.roomId).emit('new_msg', {
-                user: socket.userData.name,
-                text: msg,
-                isVip: socket.userData.isVip,
-                vipIcon: socket.userData.vipIcon
-            });
-        }
-    });
-
-    socket.on('disconnect', () => {
-        queue = queue.filter(s => s.id !== socket.id);
-        io.emit('queue_size', queue.length);
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server on port ${PORT}`));
+function processNight(room) {
+    const actions = room.actions;
+    let killedId = actions.mafia ? actions.mafia.targetId : null;
+    let savedId = actions.doctor ? actions.doctor.targetId : null;
+
+    if (killedId === savedId) killedId = null; // Доктор спас!
+
+    io.to(room.id).emit('change_phase', { 
+        phase: 'day', 
+        killed: killedId,
+        commResult: actions.comm ? {
+            targetId: actions.comm.targetId,
+            isMafia: room.players.find(p => p.id === actions.comm.targetId).role === 'mafia'
+        } : null
+    });
+    room.actions = {};
+    room.phase = 'day';
+}
+
+server.listen(process.env.PORT || 3000);
