@@ -1,63 +1,88 @@
 const http = require('http');
 const { Server } = require('socket.io');
 
-const server = http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end('MAFIA_SERVER_ACTIVE');
-});
+const server = http.createServer((req, res) => { res.end('MAFIA_ADVANCED_V5'); });
+const io = new Server(server, { cors: { origin: "*" } });
 
-const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
-});
-
-let queue = []; // Очередь поиска
+let queue = [];
+let rooms = {};
 
 io.on('connection', (socket) => {
-    console.log('Подключен:', socket.id);
-
     socket.on('join_queue', (data) => {
-        // Проверяем, нет ли его уже в очереди
-        if (!queue.find(s => s.id === socket.id)) {
-            socket.userData = data;
-            queue.push(socket);
-            console.log('В очереди:', queue.length);
-        }
+        socket.userData = data; // {name, isVip, mafiaLuck: 0, commLuck: 0}
+        queue.push(socket);
 
-        // Каждую секунду проверяем очередь и создаем пары
-        if (queue.length >= 2) {
-            const p1 = queue.shift();
-            const p2 = queue.shift();
-            const roomId = `room_${p1.id}`;
-
-            p1.join(roomId);
-            p2.join(roomId);
-
-            // Назначаем роли
-            const roles = Math.random() > 0.5 ? ['мафия', 'мирный'] : ['мирный', 'мафия'];
-
-            io.to(p1.id).emit('start_game', { room: roomId, role: roles[0], opp: p2.userData.name });
-            io.to(p2.id).emit('start_game', { room: roomId, role: roles[1], opp: p1.userData.name });
+        if (queue.length >= 3) { // Игра на троих для теста комиссара
+            const players = [queue.shift(), queue.shift(), queue.shift()];
+            const roomId = `room_${Date.now()}`;
             
-            console.log('Игра создана:', roomId);
-        } else {
-            // Сообщаем игроку, что он один
-            socket.emit('queue_status', queue.length);
+            // Логика шансов: сортируем по купленным шансам
+            players.sort((a, b) => (b.userData.mafiaLuck || 0) - (a.userData.mafiaLuck || 0));
+            const mafia = players[0];
+            
+            players.sort((a, b) => (b.userData.commLuck || 0) - (a.userData.commLuck || 0));
+            // Если мафия уже выбрана, берем следующего для комиссара
+            const comm = players.find(p => p.id !== mafia.id) || players[1];
+            
+            rooms[roomId] = { players, phase: 'night', votes: {}, aliveCount: 3 };
+
+            players.forEach(p => {
+                p.join(roomId);
+                p.roomId = roomId;
+                p.role = (p.id === mafia.id) ? 'mafia' : (p.id === comm.id ? 'comm' : 'citizen');
+                p.isAlive = true;
+                
+                p.emit('start_game', {
+                    room: roomId,
+                    role: p.role,
+                    players: players.map(pl => ({id: pl.id, name: pl.userData.name}))
+                });
+            });
         }
     });
 
-    socket.on('action', (roomId) => {
-        io.to(roomId).emit('to_day');
+    // Способности мафии и комиссара
+    socket.on('use_ability', (data) => {
+        const room = rooms[socket.roomId];
+        if (!room || room.phase !== 'night') return;
+
+        if (socket.role === 'mafia') {
+            if (data.type === 'kill') {
+                io.to(socket.roomId).emit('sys_msg', `🔪 Мафия совершила нападение!`);
+            } else {
+                io.to(socket.roomId).emit('sys_msg', `🌫 Мафия решила скрыться в тенях...`);
+            }
+        } 
+        
+        if (socket.role === 'comm') {
+            if (data.type === 'check') {
+                socket.emit('sys_msg', `🔍 Результат проверки: игрок ${data.targetName} — ${data.targetRole}`);
+            } else {
+                io.to(socket.roomId).emit('sys_msg', `🔫 Комиссар применил оружие!`);
+            }
+        }
+
+        // Переход в день
+        room.phase = 'day';
+        io.to(socket.roomId).emit('change_phase', 'day');
     });
 
-    socket.on('message', (data) => {
-        io.to(data.room).emit('new_msg', { user: data.user, text: data.text });
+    socket.on('vote', (targetId) => {
+        const room = rooms[socket.roomId];
+        if (room && room.phase === 'day') {
+            room.votes[socket.id] = targetId;
+            if (Object.keys(room.votes).length >= 2) { // Минимальный порог голосов
+                io.to(socket.roomId).emit('sys_msg', `⚖️ Голосование завершено!`);
+                room.phase = 'night';
+                room.votes = {};
+                io.to(socket.roomId).emit('change_phase', 'night');
+            }
+        }
     });
 
-    socket.on('disconnect', () => {
-        queue = queue.filter(s => s.id !== socket.id);
-        console.log('Отключен. В очереди:', queue.length);
+    socket.on('message', (d) => {
+        io.to(d.room).emit('new_msg', { user: d.user, text: d.text });
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Сервер на порту:', PORT));
+server.listen(process.env.PORT || 3000);
