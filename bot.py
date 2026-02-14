@@ -1,50 +1,18 @@
-import asyncio
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
-from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
+import telebot
+import os
 
-# Вставь сюда токен, который выдал @BotFather
-TOKEN = "8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM"
-# Ссылка на твой развернутый index.html (например, на GitHub Pages или Vercel)
-WEB_APP_URL = "https://veniamin-546.github.io/mafia_game/"
+# Берем токен из настроек (чтобы не светить его в коде)
+TOKEN = os.getenv('BOT_TOKEN')
+bot = telebot.TeleBot(TOKEN)
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, "Привет! Я Мафия-бот. Твой игровой движок запущен и готов к работе!")
 
-
-@dp.message(CommandStart())
-async def start_handler(message: types.Message):
-    # Красивое приветствие с использованием имени пользователя
-    user_name = message.from_user.first_name
-
-    # Создаем кнопку WebApp
-    markup = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="🎭 ВОЙТИ В ИГРУ",
-                web_app=WebAppInfo(url=WEB_APP_URL)
-            )
-        ],
-        [
-            InlineKeyboardButton(text="📢 Канал проекта", url="https://t.me/Vens_Games")
-        ]
-    ])
-
-    await message.answer(
-        f"Привет, {user_name}! 🕵️‍♂️\n\n"
-        "Добро пожаловать в **MAFIA**.\n"
-        "Город засыпает, и только ты решаешь, кто проснется завтра.\n\n"
-        "Нажми кнопку ниже, чтобы начать поиск игры или создать свое лобби.",
-        parse_mode="Markdown",
-        reply_markup=markup
-    )
-
+@bot.message_handler(func=lambda message: True)
+def echo_all(message):
+    bot.reply_to(message, "Я получил твое сообщение, но сейчас я больше занят игрой в Mini App!")
 
 # Запуск бота
-async def main():
-    print("Бот запущен и готов к игре!")
-    await dp.start_polling(bot)
-
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    bot.infinity_polling()
