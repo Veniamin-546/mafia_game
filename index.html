@@ -128,6 +128,10 @@
             justify-content: center; align-items: center; flex-direction: column;
             backdrop-filter: blur(10px);
         }
+
+        /* --- НОВЫЕ СТИЛИ --- */
+        .purchased-badge { color: var(--green) !important; font-weight: 800; font-size: 10px; text-transform: uppercase; margin-top: 5px; display: block; }
+        option:disabled { color: #555; }
     </style>
 </head>
 <body>
@@ -151,12 +155,13 @@
             <input type="text" id="inp-name" maxlength="15" placeholder="Введите ник...">
         </div>
         <div class="card">
-            <label style="font-size: 12px; opacity: 0.5;">VIP ЗНАЧОК</label>
+            <label style="font-size: 12px; opacity: 0.5;">VIP ЗНАЧОК <span id="vip-status-text" style="color: var(--gold); float: right;"></span></label>
             <select id="inp-icon">
-                <option value="👑">Корона 👑</option>
-                <option value="🔥">Пламя 🔥</option>
-                <option value="💀">Череп 💀</option>
-                <option value="💎">Алмаз 💎</option>
+                <option value="">Без иконки</option>
+                <option value="👑" class="vip-opt">Корона 👑</option>
+                <option value="🔥" class="vip-opt">Пламя 🔥</option>
+                <option value="💀" class="vip-opt">Череп 💀</option>
+                <option value="💎" class="vip-opt">Алмаз 💎</option>
             </select>
         </div>
         <div class="btn-group">
@@ -170,20 +175,20 @@
         <div style="overflow-y: auto; flex-grow: 1; padding-bottom: 20px;">
             <div class="card" style="border-color: var(--gold);">
                 <div style="font-size: 24px; margin-bottom: 5px; color: var(--gold);">👑 PREMIUM VIP</div>
-                <p style="font-size: 12px; opacity: 0.6;">Золотой ник и иконка в чате.</p>
-                <button class="btn btn-secondary" style="margin-bottom:8px;" onclick="initStarsPayment('vip_1m', 150)">1 МЕСЯЦ — 150 ⭐</button>
-                <button class="btn btn-secondary" style="margin-bottom:8px;" onclick="initStarsPayment('vip_4m', 500)">4 МЕСЯЦА — 500 ⭐</button>
-                <button class="btn btn-gold" onclick="initStarsPayment('vip_1y', 1200)">1 ГОД — 1200 ⭐</button>
+                <p id="vip-check" style="font-size: 12px; opacity: 0.6;">Золотой ник и иконка в чате.</p>
+                <button class="btn btn-secondary shop-btn" data-type="vip" style="margin-bottom:8px;" onclick="initStarsPayment('vip_1m', 150)">1 МЕСЯЦ — 150 ⭐</button>
+                <button class="btn btn-secondary shop-btn" data-type="vip" style="margin-bottom:8px;" onclick="initStarsPayment('vip_4m', 500)">4 МЕСЯЦА — 500 ⭐</button>
+                <button class="btn btn-gold shop-btn" data-type="vip" onclick="initStarsPayment('vip_1y', 1200)">1 ГОД — 1200 ⭐</button>
             </div>
             <div class="card">
                 <div style="font-size: 20px; margin-bottom: 5px; color: #4cc9f0;">🔍 ШАНС КОМИССАРА</div>
-                <p style="font-size: 12px; opacity: 0.6;">+80% шанс стать комиссаром.</p>
-                <button class="btn btn-primary" style="width: 100%; background: #4cc9f0;" onclick="initStarsPayment('luck_c', 200)">200 ⭐</button>
+                <p id="luck-c-check" style="font-size: 12px; opacity: 0.6;">+80% шанс стать комиссаром.</p>
+                <button class="btn btn-primary shop-btn" data-type="luck_c" style="width: 100%; background: #4cc9f0;" onclick="initStarsPayment('luck_c', 200)">200 ⭐</button>
             </div>
             <div class="card">
                 <div style="font-size: 20px; margin-bottom: 5px;">🔪 ШАНС МАФИИ</div>
-                <p style="font-size: 12px; opacity: 0.6;">+80% шанс стать мафией.</p>
-                <button class="btn btn-primary" style="width: 100%;" onclick="initStarsPayment('luck_m', 250)">250 ⭐</button>
+                <p id="luck-m-check" style="font-size: 12px; opacity: 0.6;">+80% шанс стать мафией.</p>
+                <button class="btn btn-primary shop-btn" data-type="luck_m" style="width: 100%;" onclick="initStarsPayment('luck_m', 250)">250 ⭐</button>
             </div>
         </div>
         <button class="btn btn-secondary" style="margin-top: auto;" onclick="showScreen('scr-menu')">НАЗАД</button>
@@ -273,11 +278,51 @@
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+
+            // --- ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА VIP ПРИ ВХОДЕ В НАСТРОЙКИ ---
+            if (id === 'scr-settings') {
+                const select = document.getElementById('inp-icon');
+                const vipLabel = document.getElementById('vip-status-text');
+                
+                if (!user.isVip) {
+                    Array.from(select.options).forEach(opt => {
+                        if(opt.classList.contains('vip-opt')) opt.disabled = true;
+                    });
+                    vipLabel.innerText = "LOCKED 🔒";
+                    vipLabel.style.color = "var(--red)";
+                } else {
+                    Array.from(select.options).forEach(opt => opt.disabled = false);
+                    vipLabel.innerText = "ACTIVE ✅";
+                    vipLabel.style.color = "var(--green)";
+                }
+            }
+
+            // --- ВИЗУАЛИЗАЦИЯ КУПЛЕННОГО В МАГАЗИНЕ ---
+            if (id === 'scr-shop') {
+                if(user.isVip) markAsPurchased('vip-check');
+                if(user.mafiaLuck > 0) markAsPurchased('luck-m-check');
+                if(user.commLuck > 0) markAsPurchased('luck-c-check');
+            }
+        }
+
+        function markAsPurchased(id) {
+            const el = document.getElementById(id);
+            if(el && !el.querySelector('.purchased-badge')) {
+                el.innerHTML += '<span class="purchased-badge">УЖЕ КУПЛЕНО ✅</span>';
+            }
         }
 
         function saveSettings() {
+            const selectedIcon = document.getElementById('inp-icon').value;
+            
+            // Защита от выбора иконки без VIP
+            if (!user.isVip && selectedIcon !== "") {
+                tg.showAlert("Иконки доступны только для VIP!");
+                return;
+            }
+
             user.name = document.getElementById('inp-name').value;
-            user.vipIcon = document.getElementById('inp-icon').value;
+            user.vipIcon = selectedIcon;
             localStorage.setItem('m_name', user.name);
             localStorage.setItem('m_icon', user.vipIcon);
             tg.showAlert("Профиль сохранен!");
@@ -293,7 +338,6 @@
             document.getElementById('lobby-count').innerText = `${count} / 2`;
         });
 
-        // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: ОТОБРАЖЕНИЕ КНОПОК ПРИ СТАРТЕ ---
         socket.on('start_game', data => {
             myRole = data.role;
             myId = data.myId;
@@ -301,8 +345,6 @@
             isAlive = true;
             document.getElementById('role-tag').innerText = "ВЫ: " + myRole.toUpperCase();
             showScreen('scr-game');
-            
-            // Принудительно вызываем обновление UI, чтобы кнопки появились в первую же секунду
             updatePhaseUI({phase: data.phase || 'night', activeRole: data.activeRole || 'mafia'});
         });
 
@@ -313,20 +355,13 @@
         function updatePhaseUI(data) {
             const phase = typeof data === 'string' ? data : data.phase;
             const activeRole = data.activeRole || '';
-            
             const pt = document.getElementById('phase-tag');
             pt.innerText = phase === 'day' ? "☀️ ДЕНЬ" : "🌙 НОЧЬ";
             pt.style.color = phase === 'day' ? "var(--gold)" : "var(--red)";
-            
-            // Скрываем все панели перед обновлением
             document.querySelectorAll('.action-tray').forEach(t => t.style.display = 'none');
-            
             if (!isAlive) return;
-
             const targets = playerList.filter(p => p.id !== myId);
-
             if (phase === 'night') {
-                // ПРОВЕРКА: Если сейчас ход твоей роли
                 if (myRole === activeRole) {
                     if (myRole === 'mafia') {
                         const tray = document.getElementById('mafia-targets');
@@ -355,7 +390,6 @@
                     addMsg(`Сейчас ход: ${activeRole.toUpperCase()}...`, true);
                 }
             } else {
-                // Дневное голосование
                 const tray = document.getElementById('vote-targets');
                 tray.innerHTML = "";
                 targets.forEach(p => {
@@ -379,7 +413,6 @@
             addMsg("Голос засчитан.", true);
         }
 
-        // --- СИСТЕМА ОПЛАТЫ STARS ---
         function initStarsPayment(type, amount) {
             if(!socket.connected) return tg.showAlert("Сервер не отвечает");
             socket.emit('create_invoice', { type, amount });
@@ -390,12 +423,11 @@
             if(!data.url) return tg.showAlert("Ошибка генерации ссылки");
             tg.openInvoice(data.url, (status) => {
                 if (status === 'paid') {
-                    // Сохраняем локально для мгновенного эффекта
                     if (data.type.includes('vip')) localStorage.setItem('m_vip', 'true');
                     if (data.type === 'luck_m') localStorage.setItem('m_luck_m', '100');
                     if (data.type === 'luck_c') localStorage.setItem('m_luck_c', '100');
                     
-                    tg.showConfirm("Оплата принята! Обновить данные?", (ok) => {
+                    tg.showConfirm("Оплата принята! Перезагрузить для активации?", (ok) => {
                         if(ok) location.reload();
                     });
                 } else {
@@ -404,7 +436,6 @@
             });
         });
 
-        // Сообщения и чат
         function sendChat() {
             const inp = document.getElementById('chat-input');
             if (inp.value && isAlive) {
@@ -438,7 +469,12 @@
             document.getElementById('win-title').innerText = data.winner === 'mafia' ? "ПОБЕДА МАФИИ" : "ПОБЕДА МИРНЫХ";
         });
 
-        socket.on('sys_msg', m => addMsg(m, true));
+        // --- ФИЛЬТР СИСТЕМНЫХ СООБЩЕНИЙ ОБ ОПЛАТЕ ---
+        socket.on('sys_msg', m => {
+            const filters = ['счет', 'оплата', 'invoice', 'звезды', 'stars', 'чек'];
+            const isTechnical = filters.some(word => m.toLowerCase().includes(word));
+            if(!isTechnical) addMsg(m, true);
+        });
 
         function addMsg(text, isSys) {
             const flow = document.getElementById('chat-flow');
