@@ -136,6 +136,14 @@
             justify-content: center; align-items: center; flex-direction: column;
             backdrop-filter: blur(10px);
         }
+
+        /* --- WIN OVERLAY --- */
+        #win-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.98); z-index: 2000;
+            flex-direction: column; justify-content: center; align-items: center;
+            text-align: center; padding: 20px; backdrop-filter: blur(15px);
+        }
     </style>
 </head>
 <body>
@@ -175,15 +183,24 @@
 
     <div id="scr-shop" class="screen">
         <h1>DONATE</h1>
-        <div class="card" style="border-color: var(--gold);">
-            <div style="font-size: 24px; margin-bottom: 5px;">👑 PREMIUM VIP</div>
-            <p style="font-size: 12px; opacity: 0.6;">Золотой ник и иконка в чате.</p>
-            <button class="btn btn-gold" style="width: 100%;" onclick="initStarsPayment('vip', 500)">500 ⭐</button>
-        </div>
-        <div class="card">
-            <div style="font-size: 20px; margin-bottom: 5px;">🔪 ШАНС МАФИИ</div>
-            <p style="font-size: 12px; opacity: 0.6;">+80% шанс стать мафией.</p>
-            <button class="btn btn-primary" style="width: 100%;" onclick="initStarsPayment('luck_m', 250)">250 ⭐</button>
+        <div style="overflow-y: auto; flex-grow: 1; padding-bottom: 20px;">
+            <div class="card" style="border-color: var(--gold);">
+                <div style="font-size: 24px; margin-bottom: 5px; color: var(--gold);">👑 PREMIUM VIP</div>
+                <p style="font-size: 12px; opacity: 0.6;">Золотой ник и иконка в чате.</p>
+                <button class="btn btn-secondary" style="margin-bottom:8px;" onclick="initStarsPayment('vip_1m', 150)">1 МЕСЯЦ — 150 ⭐</button>
+                <button class="btn btn-secondary" style="margin-bottom:8px;" onclick="initStarsPayment('vip_4m', 500)">4 МЕСЯЦА — 500 ⭐</button>
+                <button class="btn btn-gold" onclick="initStarsPayment('vip_1y', 1200)">1 ГОД — 1200 ⭐</button>
+            </div>
+            <div class="card">
+                <div style="font-size: 20px; margin-bottom: 5px; color: #4cc9f0;">🔍 ШАНС КОМИССАРА</div>
+                <p style="font-size: 12px; opacity: 0.6;">+80% шанс стать комиссаром.</p>
+                <button class="btn btn-primary" style="width: 100%; background: #4cc9f0;" onclick="initStarsPayment('luck_c', 200)">200 ⭐</button>
+            </div>
+            <div class="card">
+                <div style="font-size: 20px; margin-bottom: 5px;">🔪 ШАНС МАФИИ</div>
+                <p style="font-size: 12px; opacity: 0.6;">+80% шанс стать мафией.</p>
+                <button class="btn btn-primary" style="width: 100%;" onclick="initStarsPayment('luck_m', 250)">250 ⭐</button>
+            </div>
         </div>
         <button class="btn btn-secondary" style="margin-top: auto;" onclick="showScreen('scr-menu')">НАЗАД</button>
     </div>
@@ -231,6 +248,13 @@
         <div style="font-size: 80px;">💀</div>
         <h1 style="color: white; font-size: 32px;">ВЫ УБИТЫ</h1>
         <button class="btn btn-primary" style="margin-top: 30px; width: 200px;" onclick="location.reload()">В МЕНЮ</button>
+    </div>
+
+    <div id="win-overlay">
+        <div id="win-icon" style="font-size: 100px; margin-bottom: 20px;">🏆</div>
+        <h1 id="win-title" style="color: white; font-size: 32px; margin: 0;">ПОБЕДА</h1>
+        <p id="win-desc" style="opacity: 0.7; margin-bottom: 40px;">Мирные очистили город!</p>
+        <button class="btn btn-primary" style="width: 200px;" onclick="location.reload()">В МЕНЮ</button>
     </div>
 
     <script>
@@ -345,6 +369,27 @@
             }
         });
 
+        // --- ЛОГИКА ПОБЕДЫ ---
+        socket.on('game_over', data => {
+            const over = document.getElementById('win-overlay');
+            const title = document.getElementById('win-title');
+            const desc = document.getElementById('win-desc');
+            const icon = document.getElementById('win-icon');
+
+            over.style.display = 'flex';
+            if (data.winner === 'mafia') {
+                title.innerText = "ПОБЕДА МАФИИ";
+                title.style.color = "var(--red)";
+                desc.innerText = "Город погрузился во тьму...";
+                icon.innerText = "🔪";
+            } else {
+                title.innerText = "ПОБЕДА МИРНЫХ";
+                title.style.color = "var(--gold)";
+                desc.innerText = "Закон и порядок восстановлены!";
+                icon.innerText = "⚖️";
+            }
+        });
+
         // --- ЧАТ ---
         function sendChat() {
             const inp = document.getElementById('chat-input');
@@ -376,7 +421,6 @@
 
         // --- ОПЛАТА STARS (РЕАЛЬНАЯ) ---
         function initStarsPayment(type, amount) {
-            // Запрашиваем у нашего сервера инвойс
             socket.emit('create_invoice', { type, amount });
         }
 
@@ -384,7 +428,7 @@
             tg.openInvoice(data.url, (status) => {
                 if (status === 'paid') {
                     tg.showAlert("Оплата успешно завершена!");
-                    if (data.type === 'vip') localStorage.setItem('m_vip', 'true');
+                    if (data.type.includes('vip')) localStorage.setItem('m_vip', 'true');
                     location.reload();
                 }
             });
