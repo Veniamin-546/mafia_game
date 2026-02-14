@@ -3,7 +3,7 @@ const { Server } = require('socket.io');
 const fetch = require('node-fetch'); // Установи через npm install node-fetch
 
 // --- НАСТРОЙКИ БОТА ---
-const BOT_TOKEN = 'ТВОЙ_ТОКЕН_ОТ_BOTFATHER'; // ВСТАВЬ СВОЙ ТОКЕН ТУТ
+const BOT_TOKEN = '8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM'; // ВСТАВЬ СВОЙ ТОКЕН ТУТ
 
 const server = http.createServer((req, res) => {
     res.writeHead(200);
