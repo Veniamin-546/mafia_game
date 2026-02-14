@@ -40,10 +40,10 @@ io.on('connection', (socket) => {
                 description = `Золотой статус на ${period}, уникальная иконка и приоритет в чате.`;
             } else if (type === 'luck_c') {
                 title = "🔍 ШАНС КОМИССАРА";
-                description = "Увеличивает шанс получить роль Комиссара на 80%.";
+                description = "Увеличивает шанс получить роль Комиссара на 80% (на 3 игры).";
             } else if (type === 'luck_m') {
                 title = "🔪 ШАНС МАФИИ";
-                description = "Увеличивает шанс получить роль Мафии на 80%.";
+                description = "Увеличивает шанс получить роль Мафии на 80% (на 3 игры).";
             }
 
             const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
@@ -72,7 +72,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- ЛОГИКА ЛОКАЛЬНЫХ КОМНАТ (НОВОЕ) ---
+    // --- ЛОГИКА ЛОКАЛЬНЫХ КОМНАТ ---
     socket.on('create_room', (userData) => {
         const roomId = generateRoomCode();
         socket.userData = userData;
@@ -133,7 +133,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- ОНЛАЙН ОЧЕРЕДЬ (ОБНОВЛЕНО ДО 10) ---
+    // --- ОНЛАЙН ОЧЕРЕДЬ ---
     socket.on('join_queue', (userData) => {
         socket.userData = userData; 
         if (!queue.find(s => s.id === socket.id)) {
@@ -142,7 +142,7 @@ io.on('connection', (socket) => {
         
         io.emit('queue_size', queue.length);
 
-        if (queue.length >= 10) { // ИЗМЕНЕНО С 2 ДО 10
+        if (queue.length >= 10) {
             const playersSockets = [];
             for(let i=0; i<10; i++) playersSockets.push(queue.shift());
             
@@ -166,42 +166,55 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- УНИВЕРСАЛЬНЫЙ ЗАПУСК ИГРЫ (ОБНОВЛЕНО С VIP ШАНСАМИ) ---
+    // --- УНИВЕРСАЛЬНЫЙ ЗАПУСК ИГРЫ С ЛИМИТОМ ШАНСОВ (3 ИГРЫ) ---
     function startGameForRoom(roomId) {
         const room = rooms[roomId];
         if (!room) return;
 
         const playersSockets = room.players.map(id => io.sockets.sockets.get(id)).filter(s => s);
         
-        // --- ЛОГИКА ШАНСОВ VIP ---
-        // Сортируем игроков по "весу" их шансов. Чем выше вес, тем выше они в списке на получение роли.
+        // 1. Сортировка по весам (с учетом VIP и Luck)
         playersSockets.sort((a, b) => {
             const getWeight = (s) => {
                 let weight = 0;
-                // Добавляем шанс от купленной удачи (Luck)
-                weight += (s.userData.mafiaLuck || 0);
-                weight += (s.userData.commLuck || 0);
+                // Проверяем, остались ли у игрока "заряды" шанса (luckGamesLeft)
+                // Если luckGamesLeft > 0, учитываем бонус удачи
+                if (s.userData.luckGamesLeft > 0) {
+                    weight += (s.userData.mafiaLuck || 0);
+                    weight += (s.userData.commLuck || 0);
+                }
                 
-                // Если есть VIP, добавляем веса согласно условиям (40+50+60+100)
                 if (s.userData.isVip) {
-                    weight += 250; // Базовый VIP приоритет (сумма всех шансов спец-ролей)
+                    weight += 250; // VIP приоритет
                 }
                 return weight;
             };
             return getWeight(b) - getWeight(a);
         });
         
-        // Распределение (в зависимости от кол-ва игроков)
-        // После сортировки по весу, VIP чаще будут попадать в первые индексы [0, 1, 2]
+        // 2. Распределение ролей
         playersSockets.forEach((p, idx) => {
             p.isAlive = true;
-            if (idx === 0) p.role = 'mafia'; // 40% шанс у VIP (через приоритет в списке)
-            else if (idx === 1) p.role = 'comm'; // 50% шанс у VIP
-            else if (idx === 2 && playersSockets.length > 3) p.role = 'doc'; // 60% шанс у VIP
-            else p.role = 'citizen'; // Для VIP житель 100%, если не попал на роли выше
+            if (idx === 0) p.role = 'mafia';
+            else if (idx === 1) p.role = 'comm';
+            else if (idx === 2 && playersSockets.length > 3) p.role = 'doc';
+            else p.role = 'citizen';
+
+            // 3. СПИСАНИЕ ЗАРЯДА ШАНСА
+            // Если игрок использовал "увеличенный шанс", уменьшаем счетчик игр
+            if (p.userData.luckGamesLeft > 0) {
+                p.userData.luckGamesLeft -= 1;
+                p.emit('sys_msg', `🍀 Использован бонус шанса! Осталось игр: ${p.userData.luckGamesLeft}`);
+                
+                // Если шансы кончились, обнуляем удачу (чтобы не влияло на вес в след. раз)
+                if (p.userData.luckGamesLeft <= 0) {
+                    p.userData.mafiaLuck = 0;
+                    p.userData.commLuck = 0;
+                    p.emit('sys_msg', '⏳ Действие бонуса шанса закончилось.');
+                }
+            }
         });
 
-        // Перемешиваем массив для фронтенда, чтобы по порядку в списке не узнали мафию
         const frontendPlayers = [...playersSockets].sort(() => Math.random() - 0.5);
 
         room.phase = 'night';
@@ -313,7 +326,6 @@ io.on('connection', (socket) => {
             });
 
             if (Object.keys(room.votes).length >= alivePlayers.length) { 
-                // Считаем голоса
                 const counts = {};
                 Object.values(room.votes).forEach(vid => counts[vid] = (counts[vid] || 0) + 1);
                 const sorted = Object.keys(counts).sort((a,b) => counts[b] - counts[a]);
@@ -373,7 +385,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         queue = queue.filter(s => s.id !== socket.id);
         io.emit('queue_size', queue.length);
-        // Если хост вышел из локального лобби, удаляем комнату
         if(socket.isHost && rooms[socket.roomId] && rooms[socket.roomId].phase === 'lobby') {
             io.to(socket.roomId).emit('sys_msg', 'Хост покинул комнату');
             delete rooms[socket.roomId];
