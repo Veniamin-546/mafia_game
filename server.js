@@ -2,7 +2,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const fetch = require('node-fetch'); // npm install node-fetch@2
 
-const BOT_TOKEN = 'ТВОЙ_ТОКЕН_ОТ_BOTFATHER';
+const BOT_TOKEN = '8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM';
 
 // Цены в Stars
 const PRICES = {
