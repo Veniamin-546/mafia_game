@@ -1,63 +1,63 @@
 const http = require('http');
 const { Server } = require('socket.io');
 
-const server = http.createServer((req, res) => { res.end('MAFIA_MATCHMAKING_READY'); });
+const server = http.createServer((req, res) => { res.end('SERVER_RUNNING'); });
 const io = new Server(server, { cors: { origin: "*" } });
 
-let playersQueue = []; // Очередь тех, кто нажал "Играть"
-let activeRooms = {};
+let matchmakingQueue = []; 
 
 io.on('connection', (socket) => {
+    console.log('User connected:', socket.id);
+
     socket.on('find_match', (userData) => {
+        // Проверяем, нет ли уже игрока в очереди
+        if (matchmakingQueue.find(s => s.id === socket.id)) return;
+        
         socket.user = userData;
-        playersQueue.push(socket);
+        matchmakingQueue.push(socket);
+        
+        console.log('Queue:', matchmakingQueue.length);
+        io.emit('queue_update', matchmakingQueue.length);
 
-        // Уведомляем всех в очереди о количестве игроков
-        io.emit('queue_update', playersQueue.length);
+        if (matchmakingQueue.length >= 2) {
+            const p1 = matchmakingQueue.shift();
+            const p2 = matchmakingQueue.shift();
+            const roomId = `room_${p1.id}`;
 
-        if (playersQueue.length >= 2) {
-            const p1 = playersQueue.shift();
-            const p2 = playersQueue.shift();
-            const roomId = `room_${Date.now()}`;
+            p1.join(roomId);
+            p2.join(roomId);
+            p1.roomId = roomId;
+            p2.roomId = roomId;
 
-            p1.join(roomId); p2.join(roomId);
-            p1.roomId = roomId; p2.roomId = roomId;
-
-            activeRooms[roomId] = { players: [p1, p2], phase: 'night' };
-
-            // Распределяем роли
             p1.role = 'mafia';
             p2.role = 'citizen';
 
-            [p1, p2].forEach(s => {
-                s.emit('match_found', {
-                    role: s.role,
-                    oppName: s.role === 'mafia' ? p2.user.name : p1.user.name
-                });
+            io.to(roomId).emit('match_found', {
+                room: roomId,
+                players: [
+                    {id: p1.id, name: p1.user.name, role: p1.role},
+                    {id: p2.id, name: p2.user.name, role: p2.role}
+                ]
             });
+            console.log('Match started in room:', roomId);
         }
     });
 
-    socket.on('night_action', () => {
-        if (socket.role === 'mafia' && activeRooms[socket.roomId]) {
-            activeRooms[socket.roomId].phase = 'day';
-            io.to(socket.roomId).emit('phase_day');
-        }
+    socket.on('night_action', (roomId) => {
+        io.to(roomId).emit('phase_day');
     });
 
-    socket.on('send_chat', (text) => {
-        if (socket.roomId) {
-            io.to(socket.roomId).emit('chat_msg', {
-                user: (socket.user.isVip ? socket.user.vipIcon + " " : "") + socket.user.name,
-                text: text,
-                isVip: socket.user.isVip
-            });
-        }
+    socket.on('send_chat', (data) => {
+        io.to(data.roomId).emit('chat_msg', {
+            user: data.name,
+            text: data.text,
+            isVip: data.isVip
+        });
     });
 
     socket.on('disconnect', () => {
-        playersQueue = playersQueue.filter(s => s.id !== socket.id);
-        io.emit('queue_update', playersQueue.length);
+        matchmakingQueue = matchmakingQueue.filter(s => s.id !== socket.id);
+        io.emit('queue_update', matchmakingQueue.length);
     });
 });
 
