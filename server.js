@@ -2,7 +2,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const axios = require('axios'); // Нужно установить: npm install axios
 
-const BOT_TOKEN = 'ТВОЙ_ТОКЕН_БОТА'; // Вставь сюда токен от BotFather
+const BOT_TOKEN = '8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM'; // Вставь сюда токен от BotFather
 const server = http.createServer((req, res) => { res.end('MAFIA_V6_ENGINE'); });
 const io = new Server(server, { cors: { origin: "*" } });
 
