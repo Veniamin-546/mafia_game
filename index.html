@@ -264,210 +264,239 @@
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.headerColor = '#0a0a0b';
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.headerColor = '#0a0a0b';
 
-        // ЗАМЕНИ НА СВОЙ URL
-        const socket = io("https://mafia-game-skw7.onrender.com/");
+    // ЗАМЕНИ НА СВОЙ URL
+    const socket = io("https://mafia-game-skw7.onrender.com/");
 
-        let user = {
-            name: localStorage.getItem('m_name') || tg.initDataUnsafe?.user?.first_name || "Gamer",
-            vipIcon: localStorage.getItem('m_icon') || "👑",
-            isVip: localStorage.getItem('m_vip') === 'true',
-            mafiaLuck: parseInt(localStorage.getItem('m_luck_m')) || 0,
-            commLuck: parseInt(localStorage.getItem('m_luck_c')) || 0
-        };
+    let user = {
+        name: localStorage.getItem('m_name') || tg.initDataUnsafe?.user?.first_name || "Gamer",
+        vipIcon: localStorage.getItem('m_icon') || "👑",
+        isVip: localStorage.getItem('m_vip') === 'true',
+        mafiaLuck: parseInt(localStorage.getItem('m_luck_m')) || 0,
+        commLuck: parseInt(localStorage.getItem('m_luck_c')) || 0
+    };
 
-        let myRole = "";
-        let myId = "";
-        let playerList = [];
-        let isAlive = true;
+    let myRole = "";
+    let myId = "";
+    let playerList = [];
+    let isAlive = true;
 
-        document.getElementById('inp-name').value = user.name;
-        document.getElementById('inp-icon').value = user.vipIcon;
+    document.getElementById('inp-name').value = user.name;
+    document.getElementById('inp-icon').value = user.vipIcon;
 
-        function showScreen(id) {
-            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-        }
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
 
-        function saveSettings() {
-            user.name = document.getElementById('inp-name').value;
-            user.vipIcon = document.getElementById('inp-icon').value;
-            localStorage.setItem('m_name', user.name);
-            localStorage.setItem('m_icon', user.vipIcon);
-            tg.showAlert("Профиль обновлен!");
-            showScreen('scr-menu');
-        }
+    function saveSettings() {
+        user.name = document.getElementById('inp-name').value;
+        user.vipIcon = document.getElementById('inp-icon').value;
+        localStorage.setItem('m_name', user.name);
+        localStorage.setItem('m_icon', user.vipIcon);
+        tg.showAlert("Профиль обновлен!");
+        showScreen('scr-menu');
+    }
 
-        // --- ПОДБОР ---
-        function enterQueue() {
-            showScreen('scr-lobby');
-            socket.emit('join_queue', user);
-        }
+    // --- ПОДБОР ---
+    function enterQueue() {
+        showScreen('scr-lobby');
+        socket.emit('join_queue', user);
+    }
 
-        socket.on('queue_size', count => {
-            document.getElementById('lobby-count').innerText = `${count} / 2`;
-        });
+    socket.on('queue_size', count => {
+        document.getElementById('lobby-count').innerText = `${count} / 2`;
+    });
 
-        socket.on('start_game', data => {
-            myRole = data.role;
-            myId = data.myId;
-            playerList = data.players;
-            isAlive = true;
-            document.getElementById('role-tag').innerText = "ВЫ: " + myRole.toUpperCase();
-            showScreen('scr-game');
-            updatePhaseUI({phase: 'night', activeRole: 'mafia'});
-        });
+    socket.on('start_game', data => {
+        myRole = data.role;
+        myId = data.myId;
+        playerList = data.players;
+        isAlive = true;
+        document.getElementById('role-tag').innerText = "ВЫ: " + myRole.toUpperCase();
+        showScreen('scr-game');
+        // ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ ПРИ СТАРТЕ
+        updatePhaseUI(data); 
+    });
 
-        // --- ИГРОВАЯ ЛОГИКА ---
-        socket.on('change_phase', data => {
-            const phase = data.phase || data;
-            const activeRole = data.activeRole || '';
-            const pt = document.getElementById('phase-tag');
-            
-            pt.innerText = phase === 'day' ? "☀️ ДЕНЬ" : "🌙 НОЧЬ";
-            pt.style.color = phase === 'day' ? "var(--gold)" : "var(--red)";
-            
-            updatePhaseUI(data);
-        });
+    // --- ИГРОВАЯ ЛОГИКА ---
+    socket.on('change_phase', data => {
+        const phase = data.phase || (typeof data === 'string' ? data : 'night');
+        const pt = document.getElementById('phase-tag');
+        
+        pt.innerText = phase === 'day' ? "☀️ ДЕНЬ" : "🌙 НОЧЬ";
+        pt.style.color = phase === 'day' ? "var(--gold)" : "var(--red)";
+        
+        updatePhaseUI(data);
+    });
 
-        function updatePhaseUI(data) {
-            const phase = data.phase || data;
-            const activeRole = data.activeRole || '';
-            
-            document.querySelectorAll('.action-tray').forEach(t => t.style.display = 'none');
-            
-            if (!isAlive) return;
+    function updatePhaseUI(data) {
+        // Защита от пустых данных
+        const phase = data.phase || (typeof data === 'string' ? data : 'night');
+        const activeRole = data.activeRole || '';
+        
+        console.log("Update UI. Phase:", phase, "Active Role:", activeRole, "My Role:", myRole);
 
-            const targets = playerList.filter(p => p.id !== myId);
+        document.querySelectorAll('.action-tray').forEach(t => t.style.display = 'none');
+        
+        if (!isAlive) return;
 
-            if (phase === 'night') {
-                if (myRole === activeRole) {
-                    if (myRole === 'mafia') {
-                        const tray = document.getElementById('mafia-targets');
-                        tray.innerHTML = "";
-                        targets.forEach(p => {
-                            tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('kill', '${p.id}', '${p.name}')">${p.name}</button>`;
-                        });
-                        document.getElementById('mafia-ui').style.display = 'block';
-                    } else if (myRole === 'comm') {
-                        const tray = document.getElementById('comm-targets');
-                        tray.innerHTML = "";
-                        targets.forEach(p => {
-                            tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('check', '${p.id}', '${p.name}')">${p.name}</button>`;
-                        });
-                        document.getElementById('comm-ui').style.display = 'block';
-                    } else if (myRole === 'doc') {
-                        const tray = document.getElementById('doc-targets');
-                        tray.innerHTML = "";
-                        // Доктор может лечить и себя (опционально), но тут для простоты - других
-                        targets.forEach(p => {
-                            tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('heal', '${p.id}', '${p.name}')">${p.name}</button>`;
-                        });
-                        // Кнопка лечения себя
-                        tray.innerHTML += `<button class="btn btn-primary" style="background:var(--green); grid-column: span 2;" onclick="abilityAction('heal', '${myId}', 'Себя')">ВЫЛЕЧИТЬ СЕБЯ</button>`;
-                        document.getElementById('doc-ui').style.display = 'block';
-                    }
-                } else {
-                    addMsg(`Ожидание хода: ${activeRole.toUpperCase()}...`, true);
+        const targets = playerList.filter(p => p.id !== myId);
+
+        if (phase === 'night') {
+            // Если роль совпадает ИЛИ если сервер прислал команду показать кнопки
+            if (myRole === activeRole || activeRole === 'all') {
+                if (myRole === 'mafia') {
+                    const tray = document.getElementById('mafia-targets');
+                    tray.innerHTML = "";
+                    targets.forEach(p => {
+                        tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('kill', '${p.id}', '${p.name}')">${p.name}</button>`;
+                    });
+                    document.getElementById('mafia-ui').style.display = 'block';
+                } else if (myRole === 'comm') {
+                    const tray = document.getElementById('comm-targets');
+                    tray.innerHTML = "";
+                    targets.forEach(p => {
+                        tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('check', '${p.id}', '${p.name}')">${p.name}</button>`;
+                    });
+                    document.getElementById('comm-ui').style.display = 'block';
+                } else if (myRole === 'doc') {
+                    const tray = document.getElementById('doc-targets');
+                    tray.innerHTML = "";
+                    targets.forEach(p => {
+                        tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('heal', '${p.id}', '${p.name}')">${p.name}</button>`;
+                    });
+                    tray.innerHTML += `<button class="btn btn-primary" style="background:var(--green); grid-column: span 2;" onclick="abilityAction('heal', '${myId}', 'Себя')">ВЫЛЕЧИТЬ СЕБЯ</button>`;
+                    document.getElementById('doc-ui').style.display = 'block';
                 }
             } else {
-                const tray = document.getElementById('vote-targets');
-                tray.innerHTML = "";
-                targets.forEach(p => {
-                    tray.innerHTML += `<button class="btn btn-secondary" onclick="voteAction('${p.id}')">${p.name}</button>`;
-                });
-                document.getElementById('vote-ui').style.display = 'block';
+                addMsg(`Ночь. Ожидание хода других ролей...`, true);
             }
-        }
-
-        function abilityAction(action, tid, tname) {
-            socket.emit('night_action', { action, targetId: tid, targetName: tname });
-            document.querySelectorAll('.action-tray').forEach(t => t.style.display = 'none');
-            addMsg("Вы сделали выбор. Ждем остальных...", true);
-        }
-
-        function voteAction(tid) {
-            socket.emit('submit_vote', tid);
-            document.getElementById('vote-ui').style.display = 'none';
-            addMsg("Голос принят.", true);
-        }
-
-        socket.on('game_event', data => {
-            if (data.type === 'attack') {
-                addMsg(`Этой ночью был атакован игрок ${data.victimName}.`, true);
-                if (data.victimId === myId) {
-                    isAlive = false;
-                    document.getElementById('death-overlay').style.display = 'flex';
-                }
-            }
-        });
-
-        socket.on('game_over', data => {
-            const over = document.getElementById('win-overlay');
-            const title = document.getElementById('win-title');
-            const desc = document.getElementById('win-desc');
-            const icon = document.getElementById('win-icon');
-
-            over.style.display = 'flex';
-            if (data.winner === 'mafia') {
-                title.innerText = "ПОБЕДА МАФИИ";
-                title.style.color = "var(--red)";
-                desc.innerText = "Город погрузился во тьму...";
-                icon.innerText = "🔪";
-            } else {
-                title.innerText = "ПОБЕДА МИРНЫХ";
-                title.style.color = "var(--gold)";
-                desc.innerText = "Закон и порядок восстановлены!";
-                icon.innerText = "⚖️";
-            }
-        });
-
-        function sendChat() {
-            const inp = document.getElementById('chat-input');
-            if (inp.value && isAlive) {
-                socket.emit('send_msg', inp.value);
-                inp.value = "";
-            }
-        }
-
-        socket.on('new_msg', d => {
-            const flow = document.getElementById('chat-flow');
-            const div = document.createElement('div');
-            div.className = `bubble ${d.user === user.name ? 'me' : ''}`;
-            div.innerHTML = `<b>${d.isVip ? d.vipIcon : ''} ${d.user}</b>${d.text}`;
-            flow.appendChild(div);
-            flow.scrollTop = flow.scrollHeight;
-        });
-
-        socket.on('sys_msg', m => addMsg(m, true));
-
-        function addMsg(text, isSys) {
-            const flow = document.getElementById('chat-flow');
-            const div = document.createElement('div');
-            div.className = isSys ? "bubble sys" : "bubble";
-            div.innerText = text;
-            flow.appendChild(div);
-            flow.scrollTop = flow.scrollHeight;
-        }
-
-        function initStarsPayment(type, amount) {
-            socket.emit('create_invoice', { type, amount });
-        }
-
-        socket.on('invoice_ready', (data) => {
-            tg.openInvoice(data.url, (status) => {
-                if (status === 'paid') {
-                    tg.showAlert("Оплата успешна! Перезагрузка...");
-                    if (data.type.includes('vip')) localStorage.setItem('m_vip', 'true');
-                    if (data.type === 'luck_m') localStorage.setItem('m_luck_m', '100');
-                    if (data.type === 'luck_c') localStorage.setItem('m_luck_c', '100');
-                    location.reload();
-                }
+        } else if (phase === 'day') {
+            const tray = document.getElementById('vote-targets');
+            tray.innerHTML = "";
+            targets.forEach(p => {
+                tray.innerHTML += `<button class="btn btn-secondary" onclick="voteAction('${p.id}')">${p.name}</button>`;
             });
+            document.getElementById('vote-ui').style.display = 'block';
+        }
+    }
+
+    function abilityAction(action, tid, tname) {
+        if (!socket.connected) {
+            tg.showAlert("Нет соединения с сервером!");
+            return;
+        }
+        socket.emit('night_action', { action, targetId: tid, targetName: tname });
+        document.querySelectorAll('.action-tray').forEach(t => t.style.display = 'none');
+        addMsg("Вы сделали выбор: " + tname, true);
+    }
+
+    function voteAction(tid) {
+        if (!socket.connected) {
+            tg.showAlert("Нет соединения с сервером!");
+            return;
+        }
+        socket.emit('submit_vote', tid);
+        document.getElementById('vote-ui').style.display = 'none';
+        addMsg("Голос отправлен.", true);
+    }
+
+    socket.on('game_event', data => {
+        if (data.type === 'attack') {
+            addMsg(`Этой ночью был атакован игрок ${data.victimName}.`, true);
+            if (data.victimId === myId) {
+                isAlive = false;
+                document.getElementById('death-overlay').style.display = 'flex';
+            }
+        }
+    });
+
+    socket.on('game_over', data => {
+        const over = document.getElementById('win-overlay');
+        const title = document.getElementById('win-title');
+        const desc = document.getElementById('win-desc');
+        const icon = document.getElementById('win-icon');
+
+        over.style.display = 'flex';
+        if (data.winner === 'mafia') {
+            title.innerText = "ПОБЕДА МАФИИ";
+            title.style.color = "var(--red)";
+            desc.innerText = "Город погрузился во тьму...";
+            icon.innerText = "🔪";
+        } else {
+            title.innerText = "ПОБЕДА МИРНЫХ";
+            title.style.color = "var(--gold)";
+            desc.innerText = "Закон и порядок восстановлены!";
+            icon.innerText = "⚖️";
+        }
+    });
+
+    function sendChat() {
+        const inp = document.getElementById('chat-input');
+        if (inp.value && isAlive) {
+            socket.emit('send_msg', inp.value);
+            inp.value = "";
+        }
+    }
+
+    socket.on('new_msg', d => {
+        const flow = document.getElementById('chat-flow');
+        const div = document.createElement('div');
+        div.className = `bubble ${d.user === user.name ? 'me' : ''}`;
+        div.innerHTML = `<b>${d.isVip ? d.vipIcon : ''} ${d.user}</b>${d.text}`;
+        flow.appendChild(div);
+        flow.scrollTop = flow.scrollHeight;
+    });
+
+    socket.on('sys_msg', m => addMsg(m, true));
+
+    function addMsg(text, isSys) {
+        const flow = document.getElementById('chat-flow');
+        const div = document.createElement('div');
+        div.className = isSys ? "bubble sys" : "bubble";
+        div.innerText = text;
+        flow.appendChild(div);
+        flow.scrollTop = flow.scrollHeight;
+    }
+
+    // --- ОПЛАТА С ИСПРАВЛЕНИЕМ ---
+    function initStarsPayment(type, amount) {
+        if (!socket.connected) {
+            tg.showAlert("Ошибка: сервер недоступен");
+            return;
+        }
+        socket.emit('create_invoice', { type, amount });
+    }
+
+    socket.on('invoice_ready', (data) => {
+        if (!data.url) {
+            tg.showAlert("Ошибка: ссылка на оплату не получена");
+            return;
+        }
+        tg.openInvoice(data.url, (status) => {
+            if (status === 'paid') {
+                tg.showConfirm("Оплата прошла успешно! Перезагрузить профиль?", (ok) => {
+                    if (ok) {
+                        if (data.type && data.type.includes('vip')) localStorage.setItem('m_vip', 'true');
+                        if (data.type === 'luck_m') localStorage.setItem('m_luck_m', '100');
+                        if (data.type === 'luck_c') localStorage.setItem('m_luck_c', '100');
+                        location.reload();
+                    }
+                });
+            } else if (status === 'failed') {
+                tg.showAlert("Ошибка при проведении платежа");
+            }
         });
-    </script>
+    });
+
+    // Обработка ошибок сокета
+    socket.on('connect_error', () => {
+        console.error("Connection failed");
+    });
+</script>
 </body>
 </html>
