@@ -68,22 +68,28 @@ function generateRoomCode() {
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
 
-    // --- НОВОЕ: ОБНОВЛЕНИЕ НАСТРОЕК В РЕАЛЬНОМ ВРЕМЕНИ ---
+    // --- ИСПРАВЛЕННОЕ ОБНОВЛЕНИЕ НАСТРОЕК ---
     socket.on('update_settings', (data) => {
         if (socket.userData) {
-            // ИМЯ МЕНЯЕМ БЕСПЛАТНО (просто обновляем в памяти сервера)
-            socket.userData.name = data.name || socket.userData.name;
+            // МЕНЯЕМ НИК БЕЗ ПРОВЕРКИ VIP
+            if (data.name) {
+                socket.userData.name = data.name;
+            }
             
             // ИКОНКУ МЕНЯЕМ ТОЛЬКО ЕСЛИ VIP
-            if (socket.userData.isVip) {
-                socket.userData.vipIcon = data.vipIcon || socket.userData.vipIcon;
+            if (socket.userData.isVip && data.vipIcon) {
+                socket.userData.vipIcon = data.vipIcon;
             }
 
-            // Если игрок уже в комнате, обновляем его данные для всех остальных
+            // Оповещаем клиента, что всё ок
+            socket.emit('sys_msg', 'Никнейм успешно изменен!');
+
+            // Если игрок в лобби или игре, обновляем инфу для всех
             if (socket.roomId && rooms[socket.roomId]) {
                 const room = rooms[socket.roomId];
                 const playersInfo = room.players.map(pid => {
                     const s = io.sockets.sockets.get(pid);
+                    if (!s) return null;
                     return { 
                         id: pid, 
                         name: s.userData.name, 
@@ -91,7 +97,7 @@ io.on('connection', (socket) => {
                         vipIcon: s.userData.isVip ? s.userData.vipIcon : null, 
                         isHost: s.isHost 
                     };
-                });
+                }).filter(p => p !== null);
                 io.to(socket.roomId).emit('room_update', { players: playersInfo });
             }
         }
