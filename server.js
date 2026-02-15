@@ -1,6 +1,6 @@
 const http = require('http');
 const { Server } = require('socket.io');
-const fetch = require('node-fetch'); // Установи через npm install node-fetch
+const fetch = require('node-fetch');
 
 // --- НАСТРОЙКИ БОТА ---
 const BOT_TOKEN = process.env.BOT_TOKEN || '8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM'; 
@@ -68,6 +68,35 @@ function generateRoomCode() {
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
 
+    // --- НОВОЕ: ОБНОВЛЕНИЕ НАСТРОЕК В РЕАЛЬНОМ ВРЕМЕНИ ---
+    socket.on('update_settings', (data) => {
+        if (socket.userData) {
+            // ИМЯ МЕНЯЕМ БЕСПЛАТНО (просто обновляем в памяти сервера)
+            socket.userData.name = data.name || socket.userData.name;
+            
+            // ИКОНКУ МЕНЯЕМ ТОЛЬКО ЕСЛИ VIP
+            if (socket.userData.isVip) {
+                socket.userData.vipIcon = data.vipIcon || socket.userData.vipIcon;
+            }
+
+            // Если игрок уже в комнате, обновляем его данные для всех остальных
+            if (socket.roomId && rooms[socket.roomId]) {
+                const room = rooms[socket.roomId];
+                const playersInfo = room.players.map(pid => {
+                    const s = io.sockets.sockets.get(pid);
+                    return { 
+                        id: pid, 
+                        name: s.userData.name, 
+                        isVip: s.userData.isVip, 
+                        vipIcon: s.userData.isVip ? s.userData.vipIcon : null, 
+                        isHost: s.isHost 
+                    };
+                });
+                io.to(socket.roomId).emit('room_update', { players: playersInfo });
+            }
+        }
+    });
+
     socket.on('create_invoice', async (data) => {
         try {
             const { type, amount } = data; 
@@ -133,7 +162,6 @@ io.on('connection', (socket) => {
                 id: socket.id, 
                 name: userData.name, 
                 isVip: userData.isVip, 
-                // ПРОВЕРКА VIP ДЛЯ ИКОНКИ
                 vipIcon: userData.isVip ? userData.vipIcon : null, 
                 isHost: true 
             }] 
@@ -157,7 +185,6 @@ io.on('connection', (socket) => {
                     id: pid, 
                     name: s.userData.name, 
                     isVip: s.userData.isVip, 
-                    // ПРОВЕРКА VIP ДЛЯ ИКОНКИ В СПИСКЕ
                     vipIcon: s.userData.isVip ? s.userData.vipIcon : null, 
                     isHost: s.isHost 
                 };
@@ -266,7 +293,6 @@ io.on('connection', (socket) => {
                     id: pl.id, 
                     name: pl.userData.name, 
                     isVip: pl.userData.isVip,
-                    // ПРОВЕРКА VIP ДЛЯ ИГРОВОГО СПИСКА
                     vipIcon: pl.userData.isVip ? pl.userData.vipIcon : null 
                 }))
             });
@@ -403,14 +429,12 @@ io.on('connection', (socket) => {
         return false;
     }
 
-    // --- ОБНОВЛЕННАЯ ЛОГИКА ЧАТА ---
     socket.on('send_msg', (msg) => {
         if (socket.roomId && socket.isAlive) {
             io.to(socket.roomId).emit('new_msg', {
-                user: socket.userData.name, // Имя отправляем всегда
+                user: socket.userData.name, 
                 text: msg,
                 isVip: socket.userData.isVip,
-                // ИКОНКА В ЧАТЕ ТОЛЬКО ДЛЯ VIP
                 vipIcon: socket.userData.isVip ? socket.userData.vipIcon : null
             });
         }
