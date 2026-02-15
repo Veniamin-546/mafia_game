@@ -308,14 +308,12 @@
                 const select = document.getElementById('inp-icon');
                 const vipLabel = document.getElementById('vip-status-text');
                 
+                // Изменено: Больше не блокируем выпадающий список (disabled), 
+                // чтобы пользователь мог менять ник и видеть список иконок.
                 if (!user.isVip) {
-                    Array.from(select.options).forEach(opt => {
-                        if(opt.classList.contains('vip-opt')) opt.disabled = true;
-                    });
                     vipLabel.innerText = "LOCKED 🔒";
                     vipLabel.style.color = "var(--red)";
                 } else {
-                    Array.from(select.options).forEach(opt => opt.disabled = false);
                     vipLabel.innerText = "ACTIVE ✅";
                     vipLabel.style.color = "var(--green)";
                 }
@@ -335,17 +333,32 @@
             }
         }
 
+        // Измененная логика сохранения: ник сохраняется всегда, иконка только для VIP
         function saveSettings() {
             const selectedIcon = document.getElementById('inp-icon').value;
-            if (!user.isVip && selectedIcon !== "") {
-                tg.showAlert("Иконки доступны только для VIP!");
-                return;
-            }
-            user.name = document.getElementById('inp-name').value;
-            user.vipIcon = selectedIcon;
+            const newName = document.getElementById('inp-name').value;
+
+            // 1. Сохраняем имя (доступно всем бесплатно)
+            user.name = newName;
             localStorage.setItem('m_name', user.name);
-            localStorage.setItem('m_icon', user.vipIcon);
-            tg.showAlert("Профиль сохранен!");
+
+            // 2. Проверяем иконку
+            if (!user.isVip && selectedIcon !== "") {
+                // Если не VIP пытается поставить иконку - сбрасываем её
+                tg.showAlert("Иконки доступны только для VIP! Ваш ник сохранен без иконки.");
+                user.vipIcon = "";
+                document.getElementById('inp-icon').value = "";
+                localStorage.setItem('m_icon', "");
+            } else {
+                // Если VIP или выбрана пустая иконка
+                user.vipIcon = selectedIcon;
+                localStorage.setItem('m_icon', user.vipIcon);
+                tg.showAlert("Профиль успешно обновлен!");
+            }
+
+            // Отправляем обновленные данные на сервер
+            socket.emit('update_settings', { name: user.name, vipIcon: user.vipIcon });
+
             showScreen('scr-menu');
         }
 
