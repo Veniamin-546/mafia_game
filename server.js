@@ -16,7 +16,6 @@ async function handleTelegramUpdates() {
             for (const update of data.result) {
                 lastUpdateId = update.update_id;
                 
-                // Если пришло текстовое сообщение
                 if (update.message && update.message.text) {
                     const chatId = update.message.chat.id;
                     const text = update.message.text;
@@ -31,7 +30,7 @@ async function handleTelegramUpdates() {
                                 text: `Привет, ${firstName}! 👋\n\nЯ — движок Mafia Supreme. Заходи в наше Mini App и начинай игру!`,
                                 reply_markup: {
                                     inline_keyboard: [[
-                                        { text: "Играть в Мафию 🎭", url: "@Mafia_Game_Vens_bot" }
+                                        { text: "Играть в Мафию 🎭", url: "https://t.me/Mafia_Game_Vens_bot/app" }
                                     ]]
                                 }
                             })
@@ -41,16 +40,14 @@ async function handleTelegramUpdates() {
             }
         }
     } catch (error) {
-        // Ошибки игнорируем, чтобы сервер не падал при сбоях сети
+        // Ошибки игнорируем
     }
-    // Рекурсивный вызов для постоянной работы
     setTimeout(handleTelegramUpdates, 1000);
 }
 
-// Запускаем бота
 handleTelegramUpdates();
 
-// --- ВАШ ТЕКУЩИЙ КОД БЕЗ ИЗМЕНЕНИЙ ---
+// --- СЕРВЕР ---
 
 const server = http.createServer((req, res) => {
     res.writeHead(200);
@@ -62,10 +59,8 @@ const io = new Server(server, { cors: { origin: "*" } });
 let queue = [];
 let rooms = {};
 
-// Порядок ходов ночью
 const NIGHT_ORDER = ['mafia', 'comm', 'doc'];
 
-// Вспомогательная функция для генерации кода комнаты
 function generateRoomCode() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
@@ -73,11 +68,9 @@ function generateRoomCode() {
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
 
-    // --- ЛОГИКА ОПЛАТЫ TELEGRAM STARS ---
     socket.on('create_invoice', async (data) => {
         try {
             const { type, amount } = data; 
-            
             let title = "";
             let description = "";
 
@@ -107,11 +100,9 @@ io.on('connection', (socket) => {
             });
 
             const result = await response.json();
-
             if (result.ok) {
                 socket.emit('invoice_ready', { url: result.result, type: type });
             } else {
-                console.error('Bot API Error:', result);
                 socket.emit('sys_msg', 'Ошибка при создании платежа.');
             }
         } catch (error) {
@@ -119,7 +110,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- ЛОГИКА ЛОКАЛЬНЫХ КОМНАТ ---
     socket.on('create_room', (userData) => {
         const roomId = generateRoomCode();
         socket.userData = userData;
@@ -139,7 +129,14 @@ io.on('connection', (socket) => {
         
         socket.emit('room_created', { 
             roomId, 
-            players: [{ id: socket.id, name: userData.name, isVip: userData.isVip, vipIcon: userData.vipIcon, isHost: true }] 
+            players: [{ 
+                id: socket.id, 
+                name: userData.name, 
+                isVip: userData.isVip, 
+                // ПРОВЕРКА VIP ДЛЯ ИКОНКИ
+                vipIcon: userData.isVip ? userData.vipIcon : null, 
+                isHost: true 
+            }] 
         });
     });
 
@@ -160,7 +157,8 @@ io.on('connection', (socket) => {
                     id: pid, 
                     name: s.userData.name, 
                     isVip: s.userData.isVip, 
-                    vipIcon: s.userData.vipIcon, 
+                    // ПРОВЕРКА VIP ДЛЯ ИКОНКИ В СПИСКЕ
+                    vipIcon: s.userData.isVip ? s.userData.vipIcon : null, 
                     isHost: s.isHost 
                 };
             });
@@ -180,7 +178,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- ОНЛАЙН ОЧЕРЕДЬ ---
     socket.on('join_queue', (userData) => {
         socket.userData = userData; 
         if (!queue.find(s => s.id === socket.id)) {
@@ -213,33 +210,27 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- УНИВЕРСАЛЬНЫЙ ЗАПУСК ИГРЫ С ЛИМИТОМ ШАНСОВ (3 ИГРЫ) ---
     function startGameForRoom(roomId) {
         const room = rooms[roomId];
         if (!room) return;
 
         const playersSockets = room.players.map(id => io.sockets.sockets.get(id)).filter(s => s);
         
-        // 1. Сортировка по весам (с учетом VIP и Luck)
         playersSockets.sort((a, b) => {
             const getWeight = (s) => {
                 let weight = 0;
-                // Проверяем, остались ли у игрока "заряды" шанса (luckGamesLeft)
-                // Если luckGamesLeft > 0, учитываем бонус удачи
                 if (s.userData.luckGamesLeft > 0) {
                     weight += (s.userData.mafiaLuck || 0);
                     weight += (s.userData.commLuck || 0);
                 }
-                
                 if (s.userData.isVip) {
-                    weight += 250; // VIP приоритет
+                    weight += 250;
                 }
                 return weight;
             };
             return getWeight(b) - getWeight(a);
         });
         
-        // 2. Распределение ролей
         playersSockets.forEach((p, idx) => {
             p.isAlive = true;
             if (idx === 0) p.role = 'mafia';
@@ -247,13 +238,9 @@ io.on('connection', (socket) => {
             else if (idx === 2 && playersSockets.length > 3) p.role = 'doc';
             else p.role = 'citizen';
 
-            // 3. СПИСАНИЕ ЗАРЯДА ШАНСА
-            // Если игрок использовал "увеличенный шанс", уменьшаем счетчик игр
             if (p.userData.luckGamesLeft > 0) {
                 p.userData.luckGamesLeft -= 1;
                 p.emit('sys_msg', `🍀 Использован бонус шанса! Осталось игр: ${p.userData.luckGamesLeft}`);
-                
-                // Если шансы кончились, обнуляем удачу (чтобы не влияло на вес в след. раз)
                 if (p.userData.luckGamesLeft <= 0) {
                     p.userData.mafiaLuck = 0;
                     p.userData.commLuck = 0;
@@ -279,14 +266,14 @@ io.on('connection', (socket) => {
                     id: pl.id, 
                     name: pl.userData.name, 
                     isVip: pl.userData.isVip,
-                    vipIcon: pl.userData.vipIcon 
+                    // ПРОВЕРКА VIP ДЛЯ ИГРОВОГО СПИСКА
+                    vipIcon: pl.userData.isVip ? pl.userData.vipIcon : null 
                 }))
             });
             if (p.role === 'mafia') p.emit('sys_msg', '🌙 Наступила ночь. Ваш ход, Мафия!');
         });
     }
 
-    // --- ПООЧЕРЕДНЫЕ ХОДЫ НОЧЬЮ ---
     socket.on('night_action', (data) => {
         const room = rooms[socket.roomId];
         if (!room || room.phase !== 'night') return;
@@ -317,7 +304,6 @@ io.on('connection', (socket) => {
         
         if (currentIndex < NIGHT_ORDER.length - 1) {
             room.activeRole = NIGHT_ORDER[currentIndex + 1];
-            
             const nextPlayer = room.players.map(pid => io.sockets.sockets.get(pid))
                 .find(s => s && s.role === room.activeRole && s.isAlive);
 
@@ -390,7 +376,6 @@ io.on('connection', (socket) => {
                     room.activeRole = 'mafia';
                     room.votes = {};
                     io.to(socket.roomId).emit('change_phase', { phase: 'night', activeRole: 'mafia' });
-                    
                     const m = room.players.map(pid => io.sockets.sockets.get(pid)).find(s => s && s.role === 'mafia' && s.isAlive);
                     if (m) m.emit('sys_msg', '🌙 Снова ваша ночь, Мафия.');
                 }
@@ -418,13 +403,15 @@ io.on('connection', (socket) => {
         return false;
     }
 
+    // --- ОБНОВЛЕННАЯ ЛОГИКА ЧАТА ---
     socket.on('send_msg', (msg) => {
         if (socket.roomId && socket.isAlive) {
             io.to(socket.roomId).emit('new_msg', {
-                user: socket.userData.name,
+                user: socket.userData.name, // Имя отправляем всегда
                 text: msg,
                 isVip: socket.userData.isVip,
-                vipIcon: socket.userData.vipIcon
+                // ИКОНКА В ЧАТЕ ТОЛЬКО ДЛЯ VIP
+                vipIcon: socket.userData.isVip ? socket.userData.vipIcon : null
             });
         }
     });
