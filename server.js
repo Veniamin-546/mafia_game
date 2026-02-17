@@ -5,7 +5,7 @@ const fetch = require('node-fetch');
 // --- НАСТРОЙКИ БОТА ---
 const BOT_TOKEN = process.env.BOT_TOKEN || '8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM'; 
 // !!! ЗАМЕНИ ЭТО ЧИСЛО НА СВОЙ TG ID (можно узнать через /start у бота) !!!
-const ADMIN_TG_ID = 123456789; 
+const ADMIN_TG_ID = 927590102; 
 
 // --- НОВАЯ ЛОГИКА: ОБРАБОТКА ТЕЛЕГРАМ-СООБЩЕНИЙ ---
 let lastUpdateId = 0;
