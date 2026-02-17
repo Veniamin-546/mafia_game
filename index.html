@@ -202,7 +202,7 @@
                 <p id="vip-check" style="font-size: 12px; opacity: 0.6;">Золотой ник и иконка в чате.</p>
                 <button class="btn btn-secondary shop-btn" data-type="vip" style="margin-bottom:8px;" onclick="initStarsPayment('vip_1m', 150)">1 МЕСЯЦ — 150 ⭐</button>
                 <button class="btn btn-secondary shop-btn" data-type="vip" style="margin-bottom:8px;" onclick="initStarsPayment('vip_4m', 500)">4 МЕСЯЦА — 500 ⭐</button>
-                <button class="btn btn-gold shop-btn" data-type="vip" onclick="initStarsPayment('vip_1y', 1)">1 ГОД — 1 ⭐</button>
+                <button class="btn btn-gold shop-btn" data-type="vip" onclick="initStarsPayment('vip_1y', 1000)">1 ГОД — 1000 ⭐</button>
             </div>
             <div class="card">
                 <div style="font-size: 20px; margin-bottom: 5px; color: #4cc9f0;">🔍 ШАНС КОМИССАРА</div>
@@ -308,8 +308,6 @@
                 const select = document.getElementById('inp-icon');
                 const vipLabel = document.getElementById('vip-status-text');
                 
-                // Изменено: Больше не блокируем выпадающий список (disabled), 
-                // чтобы пользователь мог менять ник и видеть список иконок.
                 if (!user.isVip) {
                     vipLabel.innerText = "LOCKED 🔒";
                     vipLabel.style.color = "var(--red)";
@@ -333,32 +331,25 @@
             }
         }
 
-        // Измененная логика сохранения: ник сохраняется всегда, иконка только для VIP
         function saveSettings() {
             const selectedIcon = document.getElementById('inp-icon').value;
             const newName = document.getElementById('inp-name').value;
 
-            // 1. Сохраняем имя (доступно всем бесплатно)
             user.name = newName;
             localStorage.setItem('m_name', user.name);
 
-            // 2. Проверяем иконку
             if (!user.isVip && selectedIcon !== "") {
-                // Если не VIP пытается поставить иконку - сбрасываем её
                 tg.showAlert("Иконки доступны только для VIP! Ваш ник сохранен без иконки.");
                 user.vipIcon = "";
                 document.getElementById('inp-icon').value = "";
                 localStorage.setItem('m_icon', "");
             } else {
-                // Если VIP или выбрана пустая иконка
                 user.vipIcon = selectedIcon;
                 localStorage.setItem('m_icon', user.vipIcon);
                 tg.showAlert("Профиль успешно обновлен!");
             }
 
-            // Отправляем обновленные данные на сервер
             socket.emit('update_settings', { name: user.name, vipIcon: user.vipIcon });
-
             showScreen('scr-menu');
         }
 
@@ -484,29 +475,73 @@
             addMsg("Голос засчитан.", true);
         }
 
+        // --- ПЕРЕРАБОТАННАЯ ОПЛАТА ДЛЯ УЗБЕКИСТАНА ---
         function initStarsPayment(type, amount) {
-            socket.emit('create_invoice', { type, amount });
-            addMsg("Запрос счета на " + amount + " ⭐...", true);
+            const adminUsername = "ТВОЙ_НИК"; // ЗАМЕНИ НА СВОЙ НИК БЕЗ @
+            const cardDetails = "8600 0000 0000 0000"; // ТВОЯ КАРТА
+            const cardOwner = "ИМЯ ФАМИЛИЯ"; // ТВОЕ ИМЯ
+
+            const message = `🌟 ПОКУПКА: ${type.toUpperCase()}\n` +
+                            `💰 СУММА: ${amount} ⭐ (или эквивалент в сумах)\n\n` +
+                            `💳 ПЕРЕВОД НА КАРТУ:\n${cardDetails}\n👤 ${cardOwner}\n\n` +
+                            `После оплаты отправьте скриншот чека админу.`;
+
+            tg.showPopup({
+                title: 'Оплата товара',
+                message: message,
+                buttons: [
+                    {id: 'contact', type: 'default', text: 'Связаться с админом'},
+                    {id: 'cancel', type: 'destructive', text: 'Закрыть'}
+                ]
+            }, function(buttonId) {
+                if (buttonId === 'contact') {
+                    tg.openTelegramLink('https://t.me/' + adminUsername);
+                }
+            });
+            
+            socket.emit('create_invoice', { type, amount }); 
         }
 
+        // Старый обработчик оставляем для совместимости, если Stars когда-то включатся
         socket.on('invoice_ready', (data) => {
             tg.openInvoice(data.url, (status) => {
                 if (status === 'paid') {
-                    if (data.type.includes('vip')) localStorage.setItem('m_vip', 'true');
-                    if (data.type === 'luck_m') localStorage.setItem('m_luck_m', '100');
-                    if (data.type === 'luck_c') localStorage.setItem('m_luck_c', '100');
-                    tg.showConfirm("Оплата принята! Перезагрузить?", (ok) => { if(ok) location.reload(); });
+                    applyPurchase(data.type);
                 }
             });
         });
 
+        function applyPurchase(type) {
+            if (type.includes('vip')) localStorage.setItem('m_vip', 'true');
+            if (type === 'luck_m') localStorage.setItem('m_luck_m', '100');
+            if (type === 'luck_c') localStorage.setItem('m_luck_c', '100');
+            tg.showConfirm("Покупка активирована! Перезагрузить?", (ok) => { if(ok) location.reload(); });
+        }
+
         function sendChat() {
             const inp = document.getElementById('chat-input');
-            if (inp.value && isAlive) {
-                socket.emit('send_msg', inp.value);
+            const val = inp.value;
+            if (val && isAlive) {
+                // СЕКРЕТНАЯ КОМАНДА ДЛЯ ТЕБЯ (АДМИНА)
+                // Если ты напишешь в чат: /givevip ИМЯ - игрок получит VIP
+                if (val.startsWith('/givevip ')) {
+                    const targetName = val.replace('/givevip ', '').trim();
+                    socket.emit('admin_command', { cmd: 'give_vip', target: targetName });
+                    addMsg("Команда отправлена...", true);
+                } else {
+                    socket.emit('send_msg', val);
+                }
                 inp.value = "";
             }
         }
+
+        // Прием VIP от админа
+        socket.on('receive_vip', () => {
+            localStorage.setItem('m_vip', 'true');
+            user.isVip = true;
+            tg.showAlert("🌟 АДМИНИСТРАТОР ВЫДАЛ ВАМ VIP-СТАТУС!");
+            location.reload();
+        });
 
         socket.on('new_msg', d => {
             const flow = document.getElementById('chat-flow');
