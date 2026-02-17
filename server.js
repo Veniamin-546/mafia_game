@@ -37,6 +37,13 @@ async function handleTelegramUpdates() {
                         });
                     }
                 }
+                
+                // Обработка успешного платежа (превращаем игрока в VIP)
+                if (update.message && update.message.successful_payment) {
+                    const payload = update.message.successful_payment.invoice_payload;
+                    console.log("ПЛАТЕЖ ПОДТВЕРЖДЕН:", payload);
+                    // Тут можно добавить логику сохранения VIP в базу данных
+                }
             }
         }
     } catch (error) {
@@ -68,23 +75,16 @@ function generateRoomCode() {
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
 
-    // --- ИСПРАВЛЕННОЕ ОБНОВЛЕНИЕ НАСТРОЕК ---
     socket.on('update_settings', (data) => {
         if (socket.userData) {
-            // МЕНЯЕМ НИК БЕЗ ПРОВЕРКИ VIP
             if (data.name) {
                 socket.userData.name = data.name;
             }
-            
-            // ИКОНКУ МЕНЯЕМ ТОЛЬКО ЕСЛИ VIP
             if (socket.userData.isVip && data.vipIcon) {
                 socket.userData.vipIcon = data.vipIcon;
             }
-
-            // Оповещаем клиента, что всё ок
             socket.emit('sys_msg', 'Никнейм успешно изменен!');
 
-            // Если игрок в лобби или игре, обновляем инфу для всех
             if (socket.roomId && rooms[socket.roomId]) {
                 const room = rooms[socket.roomId];
                 const playersInfo = room.players.map(pid => {
@@ -103,6 +103,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- ИСПРАВЛЕННЫЙ БЛОК ОПЛАТЫ ---
     socket.on('create_invoice', async (data) => {
         try {
             const { type, amount } = data; 
@@ -111,7 +112,7 @@ io.on('connection', (socket) => {
 
             if (type.startsWith('vip')) {
                 title = "👑 PREMIUM VIP";
-                const period = type === 'vip_1y' ? "год" : (type === 'vip_4m' ? "4 месяца" : "1 month");
+                const period = type === 'vip_1y' ? "год" : (type === 'vip_4m' ? "4 месяца" : "1 месяц");
                 description = `Золотой статус на ${period}, уникальная иконка и приоритет в чате.`;
             } else if (type === 'luck_c') {
                 title = "🔍 ШАНС КОМИССАРА";
@@ -121,27 +122,32 @@ io.on('connection', (socket) => {
                 description = "Увеличивает шанс получить роль Мафии на 80% (на 3 игры).";
             }
 
+            // Отправляем запрос на создание ссылки
             const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title: title,
                     description: description,
-                    payload: `payment_${type}_${socket.id}`,
-                    provider_token: "", 
-                    currency: "XTR", 
-                    prices: [{ label: "⭐ Stars", amount: amount }]
+                    payload: `pay_${type}_${socket.id}`, // Строковый payload
+                    provider_token: "", // Пусто для Telegram Stars
+                    currency: "XTR",    // Валюта - Звезды
+                    prices: [{ label: "Настройка профиля", amount: parseInt(amount) }] 
                 })
             });
 
             const result = await response.json();
-            if (result.ok) {
+            
+            if (result.ok && result.result) {
+                console.log("Invoice created:", result.result);
                 socket.emit('invoice_ready', { url: result.result, type: type });
             } else {
-                socket.emit('sys_msg', 'Ошибка при создании платежа.');
+                console.error("Telegram API Error:", result);
+                socket.emit('sys_msg', 'Ошибка: Платежи Stars не настроены в BotFather');
             }
         } catch (error) {
             console.error('Payment Crash:', error);
+            socket.emit('sys_msg', 'Критическая ошибка сервера платежей.');
         }
     });
 
@@ -274,11 +280,6 @@ io.on('connection', (socket) => {
             if (p.userData.luckGamesLeft > 0) {
                 p.userData.luckGamesLeft -= 1;
                 p.emit('sys_msg', `🍀 Использован бонус шанса! Осталось игр: ${p.userData.luckGamesLeft}`);
-                if (p.userData.luckGamesLeft <= 0) {
-                    p.userData.mafiaLuck = 0;
-                    p.userData.commLuck = 0;
-                    p.emit('sys_msg', '⏳ Действие бонуса шанса закончилось.');
-                }
             }
         });
 
@@ -302,7 +303,6 @@ io.on('connection', (socket) => {
                     vipIcon: pl.userData.isVip ? pl.userData.vipIcon : null 
                 }))
             });
-            if (p.role === 'mafia') p.emit('sys_msg', '🌙 Наступила ночь. Ваш ход, Мафия!');
         });
     }
 
@@ -319,7 +319,7 @@ io.on('connection', (socket) => {
         if (socket.role === 'comm' && data.action === 'check') {
             const target = io.sockets.sockets.get(data.targetId);
             const isMafia = target && target.role === 'mafia';
-            socket.emit('sys_msg', `🔍 Результат проверки: ${data.targetName} - ${isMafia ? 'МАФИЯ' : 'МИРНЫЙ'}`);
+            socket.emit('sys_msg', `🔍 Результат: ${data.targetName} - ${isMafia ? 'МАФИЯ' : 'МИРНЫЙ'}`);
         }
 
         if (socket.role === 'doc' && data.action === 'heal') {
@@ -340,8 +340,6 @@ io.on('connection', (socket) => {
                 .find(s => s && s.role === room.activeRole && s.isAlive);
 
             if (nextPlayer) {
-                io.to(roomId).emit('sys_msg', `Ход роли: ${room.activeRole}...`);
-                nextPlayer.emit('sys_msg', '🌙 Теперь ваш черед действовать!');
                 io.to(roomId).emit('change_phase', { phase: 'night', activeRole: room.activeRole });
             } else {
                 advanceNightTurn(roomId);
@@ -365,8 +363,6 @@ io.on('connection', (socket) => {
                     type: 'attack', victimId: killId, victimName: victimName 
                 });
             }
-        } else if (killId && killId === saveId) {
-            io.to(roomId).emit('sys_msg', '🛡️ Доктор спас игрока! Ночью никто не погиб.');
         }
 
         room.phase = 'day';
@@ -375,7 +371,6 @@ io.on('connection', (socket) => {
         
         if (!checkWinCondition(roomId)) {
             io.to(roomId).emit('change_phase', { phase: 'day' });
-            io.to(roomId).emit('sys_msg', '☀️ Город просыпается. Время голосования!');
         }
     }
 
@@ -383,7 +378,6 @@ io.on('connection', (socket) => {
         const room = rooms[socket.roomId];
         if (room && room.phase === 'day') {
             room.votes[socket.id] = targetId;
-            socket.emit('sys_msg', `Голос принят.`);
             
             const alivePlayers = room.players.filter(pid => {
                 const s = io.sockets.sockets.get(pid);
@@ -400,7 +394,7 @@ io.on('connection', (socket) => {
                 if (targetSocket) {
                     targetSocket.isAlive = false;
                     room.aliveCount--;
-                    io.to(socket.roomId).emit('sys_msg', `⚖️ Жители решили казнить ${targetSocket.userData.name}.`);
+                    io.to(socket.roomId).emit('sys_msg', `⚖️ Казнен ${targetSocket.userData.name}.`);
                 }
 
                 if (!checkWinCondition(socket.roomId)) {
@@ -408,8 +402,6 @@ io.on('connection', (socket) => {
                     room.activeRole = 'mafia';
                     room.votes = {};
                     io.to(socket.roomId).emit('change_phase', { phase: 'night', activeRole: 'mafia' });
-                    const m = room.players.map(pid => io.sockets.sockets.get(pid)).find(s => s && s.role === 'mafia' && s.isAlive);
-                    if (m) m.emit('sys_msg', '🌙 Снова ваша ночь, Мафия.');
                 }
             }
         }
@@ -449,10 +441,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         queue = queue.filter(s => s.id !== socket.id);
         io.emit('queue_size', queue.length);
-        if(socket.isHost && rooms[socket.roomId] && rooms[socket.roomId].phase === 'lobby') {
-            io.to(socket.roomId).emit('sys_msg', 'Хост покинул комнату');
-            delete rooms[socket.roomId];
-        }
     });
 });
 
