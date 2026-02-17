@@ -4,6 +4,8 @@ const fetch = require('node-fetch');
 
 // --- НАСТРОЙКИ БОТА ---
 const BOT_TOKEN = process.env.BOT_TOKEN || '8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM'; 
+// !!! ЗАМЕНИ ЭТО ЧИСЛО НА СВОЙ TG ID (можно узнать через /start у бота) !!!
+const ADMIN_TG_ID = 123456789; 
 
 // --- НОВАЯ ЛОГИКА: ОБРАБОТКА ТЕЛЕГРАМ-СООБЩЕНИЙ ---
 let lastUpdateId = 0;
@@ -32,6 +34,7 @@ async function handleTelegramUpdates() {
                     const chatId = update.message.chat.id;
                     const text = update.message.text;
                     const firstName = update.message.from.first_name;
+                    const userId = update.message.from.id; // Получаем реальный ID пользователя
 
                     if (text === '/start') {
                         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -39,7 +42,7 @@ async function handleTelegramUpdates() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 chat_id: chatId,
-                                text: `Привет, ${firstName}! 👋\n\nЯ — движок Mafia Supreme. Заходи в наше Mini App и начинай игру!`,
+                                text: `Привет, ${firstName}! 👋\n\nТвой личный ID: ${userId}\nЯ — движок Mafia Supreme. Заходи в Mini App!`,
                                 reply_markup: {
                                     inline_keyboard: [[
                                         { text: "Играть в Мафию 🎭", url: "https://t.me/Mafia_Game_Vens_bot/app" }
@@ -55,30 +58,11 @@ async function handleTelegramUpdates() {
                     const payload = update.message.successful_payment.invoice_payload;
                     console.log("ПЛАТЕЖ ПОДТВЕРЖДЕН:", payload);
                     
-                    // Извлекаем тип услуги и socketId из payload (pay_TYPE_SOCKETID)
                     const parts = payload.split('_');
-                    const type = parts.slice(1, -1).join('_'); // например, "vip_1m" или "luck_c"
+                    const type = parts.slice(1, -1).join('_');
                     const socketId = parts[parts.length - 1];
 
-                    const targetSocket = io.sockets.sockets.get(socketId);
-                    if (targetSocket && targetSocket.userData) {
-                        if (type.startsWith('vip')) {
-                            targetSocket.userData.isVip = true;
-                            targetSocket.userData.vipIcon = "👑";
-                            targetSocket.emit('sys_msg', '🎉 Оплата прошла! Статус PREMIUM активирован.');
-                        } else if (type === 'luck_c') {
-                            targetSocket.userData.commLuck = 800;
-                            targetSocket.userData.luckGamesLeft = 3;
-                            targetSocket.emit('sys_msg', '🍀 Оплата прошла! Шанс Комиссара +80% на 3 игры.');
-                        } else if (type === 'luck_m') {
-                            targetSocket.userData.mafiaLuck = 800;
-                            targetSocket.userData.luckGamesLeft = 3;
-                            targetSocket.emit('sys_msg', '🍀 Оплата прошла! Шанс Мафии +80% на 3 игры.');
-                        }
-                        
-                        // Сообщаем клиенту об обновлении данных
-                        targetSocket.emit('user_data_updated', targetSocket.userData);
-                    }
+                    applyBonusToSocket(socketId, type);
                 }
             }
         }
@@ -86,6 +70,38 @@ async function handleTelegramUpdates() {
         console.error("Update error:", error);
     }
     setTimeout(handleTelegramUpdates, 1000);
+}
+
+// Функция выдачи бонуса (используется и для платежей, и для админки)
+function applyBonusToSocket(targetId, type, isByUserId = false) {
+    let targetSocket;
+    
+    if (isByUserId) {
+        // Поиск по уникальному ID игрока
+        targetSocket = Array.from(io.sockets.sockets.values()).find(s => s.userData && s.userData.userId == targetId);
+    } else {
+        // Поиск по Socket ID
+        targetSocket = io.sockets.sockets.get(targetId);
+    }
+
+    if (targetSocket && targetSocket.userData) {
+        if (type.startsWith('vip') || type === 'give_vip') {
+            targetSocket.userData.isVip = true;
+            targetSocket.userData.vipIcon = "👑";
+            targetSocket.emit('sys_msg', '🎉 Статус PREMIUM активирован!');
+        } else if (type === 'luck_c') {
+            targetSocket.userData.commLuck = 800;
+            targetSocket.userData.luckGamesLeft = 3;
+            targetSocket.emit('sys_msg', '🍀 Бонус: Шанс Комиссара +80% на 3 игры.');
+        } else if (type === 'luck_m') {
+            targetSocket.userData.mafiaLuck = 800;
+            targetSocket.userData.luckGamesLeft = 3;
+            targetSocket.emit('sys_msg', '🍀 Бонус: Шанс Мафии +80% на 3 игры.');
+        }
+        targetSocket.emit('user_data_updated', targetSocket.userData);
+        return true;
+    }
+    return false;
 }
 
 handleTelegramUpdates();
@@ -111,6 +127,24 @@ function generateRoomCode() {
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
 
+    // --- АДМИН ПАНЕЛЬ ---
+    socket.on('admin_command', (data) => {
+        // Проверка: только ты можешь выполнять это
+        if (data.adminKey !== ADMIN_TG_ID) {
+            socket.emit('sys_msg', '🚫 Отказано в доступе');
+            return;
+        }
+
+        const { targetUserId, action } = data;
+        const success = applyBonusToSocket(targetUserId, action, true);
+
+        if (success) {
+            socket.emit('sys_msg', `✅ Команда ${action} выполнена для игрока ${targetUserId}`);
+        } else {
+            socket.emit('sys_msg', `❌ Игрок с ID ${targetUserId} не найден в сети`);
+        }
+    });
+
     socket.on('update_settings', (data) => {
         if (socket.userData) {
             if (data.name) {
@@ -128,6 +162,7 @@ io.on('connection', (socket) => {
                     if (!s) return null;
                     return { 
                         id: pid, 
+                        userId: s.userData.userId, // Передаем ID для админки
                         name: s.userData.name, 
                         isVip: s.userData.isVip, 
                         vipIcon: s.userData.isVip ? s.userData.vipIcon : null, 
@@ -139,7 +174,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- БЛОК ОПЛАТЫ ---
     socket.on('create_invoice', async (data) => {
         try {
             const { type, amount } = data; 
@@ -186,6 +220,8 @@ io.on('connection', (socket) => {
     socket.on('create_room', (userData) => {
         const roomId = generateRoomCode();
         socket.userData = userData;
+        // Генерируем ID если его нет
+        if (!socket.userData.userId) socket.userData.userId = Math.floor(100000 + Math.random() * 900000);
         socket.isHost = true;
         
         rooms[roomId] = {
@@ -204,6 +240,7 @@ io.on('connection', (socket) => {
             roomId, 
             players: [{ 
                 id: socket.id, 
+                userId: socket.userData.userId,
                 name: userData.name, 
                 isVip: userData.isVip, 
                 vipIcon: userData.isVip ? userData.vipIcon : null, 
@@ -218,6 +255,7 @@ io.on('connection', (socket) => {
         
         if (room && room.phase === 'lobby' && room.players.length < 12) {
             socket.userData = userData;
+            if (!socket.userData.userId) socket.userData.userId = Math.floor(100000 + Math.random() * 900000);
             socket.roomId = roomId;
             socket.isHost = false;
             room.players.push(socket.id);
@@ -227,6 +265,7 @@ io.on('connection', (socket) => {
                 const s = io.sockets.sockets.get(pid);
                 return { 
                     id: pid, 
+                    userId: s.userData.userId,
                     name: s.userData.name, 
                     isVip: s.userData.isVip, 
                     vipIcon: s.userData.isVip ? s.userData.vipIcon : null, 
@@ -251,6 +290,7 @@ io.on('connection', (socket) => {
 
     socket.on('join_queue', (userData) => {
         socket.userData = userData; 
+        if (!socket.userData.userId) socket.userData.userId = Math.floor(100000 + Math.random() * 900000);
         if (!queue.find(s => s.id === socket.id)) {
             queue.push(socket);
         }
@@ -294,9 +334,7 @@ io.on('connection', (socket) => {
                     weight += (s.userData.mafiaLuck || 0);
                     weight += (s.userData.commLuck || 0);
                 }
-                if (s.userData.isVip) {
-                    weight += 250;
-                }
+                if (s.userData.isVip) weight += 250;
                 return weight;
             };
             return getWeight(b) - getWeight(a);
@@ -311,7 +349,7 @@ io.on('connection', (socket) => {
 
             if (p.userData.luckGamesLeft > 0) {
                 p.userData.luckGamesLeft -= 1;
-                p.emit('sys_msg', `🍀 Использован бонус шанса! Осталось игр: ${p.userData.luckGamesLeft}`);
+                p.emit('sys_msg', `🍀 Использован бонус! Осталось: ${p.userData.luckGamesLeft}`);
                 p.emit('user_data_updated', p.userData);
             }
         });
@@ -331,6 +369,7 @@ io.on('connection', (socket) => {
                 activeRole: 'mafia',
                 players: frontendPlayers.map(pl => ({ 
                     id: pl.id, 
+                    userId: pl.userData.userId, // Важно для админки
                     name: pl.userData.name, 
                     isVip: pl.userData.isVip,
                     vipIcon: pl.userData.isVip ? pl.userData.vipIcon : null 
@@ -341,24 +380,20 @@ io.on('connection', (socket) => {
 
     socket.on('night_action', (data) => {
         const room = rooms[socket.roomId];
-        if (!room || room.phase !== 'night') return;
-        if (socket.role !== room.activeRole) return;
+        if (!room || room.phase !== 'night' || socket.role !== room.activeRole) return;
 
         if (socket.role === 'mafia' && data.action === 'kill') {
             room.nightActions.killId = data.targetId;
             room.nightActions.victimName = data.targetName;
         }
-        
         if (socket.role === 'comm' && data.action === 'check') {
             const target = io.sockets.sockets.get(data.targetId);
             const isMafia = target && target.role === 'mafia';
             socket.emit('sys_msg', `🔍 Результат: ${data.targetName} - ${isMafia ? 'МАФИЯ' : 'МИРНЫЙ'}`);
         }
-
         if (socket.role === 'doc' && data.action === 'heal') {
             room.nightActions.saveId = data.targetId;
         }
-
         advanceNightTurn(socket.roomId);
     });
 
@@ -392,38 +427,28 @@ io.on('connection', (socket) => {
             if (victim) {
                 victim.isAlive = false;
                 room.aliveCount--;
-                io.to(roomId).emit('game_event', { 
-                    type: 'attack', victimId: killId, victimName: victimName 
-                });
+                io.to(roomId).emit('game_event', { type: 'attack', victimId: killId, victimName: victimName });
             }
         }
 
         room.phase = 'day';
         room.activeRole = null;
         room.nightActions = { killId: null, saveId: null };
-        
-        if (!checkWinCondition(roomId)) {
-            io.to(roomId).emit('change_phase', { phase: 'day' });
-        }
+        if (!checkWinCondition(roomId)) io.to(roomId).emit('change_phase', { phase: 'day' });
     }
 
     socket.on('submit_vote', (targetId) => {
         const room = rooms[socket.roomId];
         if (room && room.phase === 'day') {
             room.votes[socket.id] = targetId;
-            
-            const alivePlayers = room.players.filter(pid => {
-                const s = io.sockets.sockets.get(pid);
-                return s && s.isAlive;
-            });
+            const alivePlayers = room.players.filter(pid => io.sockets.sockets.get(pid)?.isAlive);
 
             if (Object.keys(room.votes).length >= alivePlayers.length) { 
                 const counts = {};
                 Object.values(room.votes).forEach(vid => counts[vid] = (counts[vid] || 0) + 1);
                 const sorted = Object.keys(counts).sort((a,b) => counts[b] - counts[a]);
-                const targetIdToKill = sorted[0];
+                const targetSocket = io.sockets.sockets.get(sorted[0]);
 
-                const targetSocket = io.sockets.sockets.get(targetIdToKill);
                 if (targetSocket) {
                     targetSocket.isAlive = false;
                     room.aliveCount--;
@@ -443,10 +468,9 @@ io.on('connection', (socket) => {
     function checkWinCondition(roomId) {
         const room = rooms[roomId];
         if(!room) return true;
-        const playersInRoom = room.players.map(pid => io.sockets.sockets.get(pid)).filter(s => s);
-        
-        const mafiaAlive = playersInRoom.some(p => p.role === 'mafia' && p.isAlive);
-        const citizensAlive = playersInRoom.some(p => p.role !== 'mafia' && p.isAlive);
+        const players = room.players.map(pid => io.sockets.sockets.get(pid)).filter(s => s);
+        const mafiaAlive = players.some(p => p.role === 'mafia' && p.isAlive);
+        const citizensAlive = players.some(p => p.role !== 'mafia' && p.isAlive);
 
         if (!mafiaAlive) {
             io.to(roomId).emit('game_over', { winner: 'citizens' });
