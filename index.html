@@ -284,6 +284,7 @@
         const socket = io("https://mafia-game-skw7.onrender.com/");
 
         let user = {
+            userId: myTgId, // Добавлено поле userId
             name: localStorage.getItem('m_name') || tg.initDataUnsafe?.user?.first_name || "Gamer",
             vipIcon: localStorage.getItem('m_icon') || "👑",
             isVip: localStorage.getItem('m_vip') === 'true',
@@ -302,6 +303,7 @@
         }
         checkVipExpiry();
 
+        // ОБНОВЛЕННАЯ АДМИНКА (теперь запрашивает ID)
         if (myTgId === ADMIN_ID) {
             const adminBtn = document.createElement('button');
             adminBtn.className = 'btn btn-secondary';
@@ -309,9 +311,15 @@
             adminBtn.style.marginTop = '10px';
             adminBtn.innerText = '⚡ АДМИН-ПАНЕЛЬ';
             adminBtn.onclick = () => {
-                const name = prompt("Введите НИК игрока:");
+                const targetId = prompt("Введите TELEGRAM ID игрока (его можно увидеть в лобби):");
                 const days = prompt("На сколько ДНЕЙ выдать VIP?", "30");
-                if (name && days) socket.emit('admin_command', { targetName: name, days: parseInt(days) });
+                if (targetId && days) {
+                    socket.emit('admin_command', { 
+                        adminKey: myTgId,
+                        targetUserId: parseInt(targetId), 
+                        days: parseInt(days) 
+                    });
+                }
             };
             document.querySelector('#scr-menu .btn-group').appendChild(adminBtn);
         }
@@ -390,12 +398,16 @@
         });
         socket.on('room_update', data => { showScreen('scr-local-lobby'); updateLocalPlayers(data.players); });
 
+        // ОБНОВЛЕНО: теперь отображает ID игроков в лобби
         function updateLocalPlayers(players) {
             const list = document.getElementById('local-player-list');
             list.innerHTML = players.map(p => `
-                <div style="padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
-                    <span>${p.isVip ? p.vipIcon : '👤'} ${p.name}</span>
-                    <span style="opacity:0.5; font-size:10px;">${p.isHost ? 'HOST' : 'READY'}</span>
+                <div style="padding:10px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>${p.isVip ? p.vipIcon : '👤'} ${p.name}</span>
+                        <span style="opacity:0.5; font-size:10px;">${p.isHost ? 'HOST' : 'READY'}</span>
+                    </div>
+                    <span style="color:gray; font-size:9px;">ID: ${p.userId || 'hidden'}</span>
                 </div>
             `).join('');
         }
@@ -453,7 +465,6 @@
             addMsg("Голос засчитан.", true);
         }
 
-        // --- УДАЛЕНО ОКНО С КАРТОЙ, ОСТАВЛЕН ТОЛЬКО ВЫЗОВ СЕРВЕРА ---
         function initStarsPayment(type, amount) {
             socket.emit('create_invoice', { type, amount }); 
         }
@@ -521,6 +532,11 @@
             flow.appendChild(div);
             flow.scrollTop = flow.scrollHeight;
         }
+
+        // Авто-инициализация при старте
+        socket.on('connect', () => {
+            console.log("Connected as ID:", myTgId);
+        });
     </script>
 </body>
 </html>
