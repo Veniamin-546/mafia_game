@@ -16,6 +16,18 @@ async function handleTelegramUpdates() {
             for (const update of data.result) {
                 lastUpdateId = update.update_id;
                 
+                // 1. ОТВЕТ НА PRE_CHECKOUT_QUERY (ОБЯЗАТЕЛЬНО ДЛЯ STARS)
+                if (update.pre_checkout_query) {
+                    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerPreCheckoutQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            pre_checkout_query_id: update.pre_checkout_query.id,
+                            ok: true
+                        })
+                    });
+                }
+
                 if (update.message && update.message.text) {
                     const chatId = update.message.chat.id;
                     const text = update.message.text;
@@ -38,16 +50,40 @@ async function handleTelegramUpdates() {
                     }
                 }
                 
-                // Обработка успешного платежа (превращаем игрока в VIP)
+                // 2. ОБРАБОТКА УСПЕШНОГО ПЛАТЕЖА
                 if (update.message && update.message.successful_payment) {
                     const payload = update.message.successful_payment.invoice_payload;
                     console.log("ПЛАТЕЖ ПОДТВЕРЖДЕН:", payload);
-                    // Тут можно добавить логику сохранения VIP в базу данных
+                    
+                    // Извлекаем тип услуги и socketId из payload (pay_TYPE_SOCKETID)
+                    const parts = payload.split('_');
+                    const type = parts.slice(1, -1).join('_'); // например, "vip_1m" или "luck_c"
+                    const socketId = parts[parts.length - 1];
+
+                    const targetSocket = io.sockets.sockets.get(socketId);
+                    if (targetSocket && targetSocket.userData) {
+                        if (type.startsWith('vip')) {
+                            targetSocket.userData.isVip = true;
+                            targetSocket.userData.vipIcon = "👑";
+                            targetSocket.emit('sys_msg', '🎉 Оплата прошла! Статус PREMIUM активирован.');
+                        } else if (type === 'luck_c') {
+                            targetSocket.userData.commLuck = 800;
+                            targetSocket.userData.luckGamesLeft = 3;
+                            targetSocket.emit('sys_msg', '🍀 Оплата прошла! Шанс Комиссара +80% на 3 игры.');
+                        } else if (type === 'luck_m') {
+                            targetSocket.userData.mafiaLuck = 800;
+                            targetSocket.userData.luckGamesLeft = 3;
+                            targetSocket.emit('sys_msg', '🍀 Оплата прошла! Шанс Мафии +80% на 3 игры.');
+                        }
+                        
+                        // Сообщаем клиенту об обновлении данных
+                        targetSocket.emit('user_data_updated', targetSocket.userData);
+                    }
                 }
             }
         }
     } catch (error) {
-        // Ошибки игнорируем
+        console.error("Update error:", error);
     }
     setTimeout(handleTelegramUpdates, 1000);
 }
@@ -103,7 +139,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- ИСПРАВЛЕННЫЙ БЛОК ОПЛАТЫ ---
+    // --- БЛОК ОПЛАТЫ ---
     socket.on('create_invoice', async (data) => {
         try {
             const { type, amount } = data; 
@@ -122,31 +158,27 @@ io.on('connection', (socket) => {
                 description = "Увеличивает шанс получить роль Мафии на 80% (на 3 игры).";
             }
 
-            // Отправляем запрос на создание ссылки
             const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title: title,
                     description: description,
-                    payload: `pay_${type}_${socket.id}`, // Строковый payload
-                    provider_token: "", // Пусто для Telegram Stars
-                    currency: "XTR",    // Валюта - Звезды
-                    prices: [{ label: "Настройка профиля", amount: parseInt(amount) }] 
+                    payload: `pay_${type}_${socket.id}`, 
+                    provider_token: "", 
+                    currency: "XTR",    
+                    prices: [{ label: "Покупка", amount: parseInt(amount) }] 
                 })
             });
 
             const result = await response.json();
             
             if (result.ok && result.result) {
-                console.log("Invoice created:", result.result);
                 socket.emit('invoice_ready', { url: result.result, type: type });
             } else {
-                console.error("Telegram API Error:", result);
-                socket.emit('sys_msg', 'Ошибка: Платежи Stars не настроены в BotFather');
+                socket.emit('sys_msg', 'Ошибка создания счета. Проверьте настройки BotFather.');
             }
         } catch (error) {
-            console.error('Payment Crash:', error);
             socket.emit('sys_msg', 'Критическая ошибка сервера платежей.');
         }
     });
@@ -280,6 +312,7 @@ io.on('connection', (socket) => {
             if (p.userData.luckGamesLeft > 0) {
                 p.userData.luckGamesLeft -= 1;
                 p.emit('sys_msg', `🍀 Использован бонус шанса! Осталось игр: ${p.userData.luckGamesLeft}`);
+                p.emit('user_data_updated', p.userData);
             }
         });
 
