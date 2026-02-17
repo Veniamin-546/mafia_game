@@ -164,8 +164,7 @@
     <div id="scr-local-lobby" class="screen">
         <h1 id="local-room-code" style="color: var(--gold); font-size: 32px;">CODE: ---</h1>
         <div class="subtitle">Ожидание игроков...</div>
-        <div class="card" id="local-player-list" style="flex-grow:1; font-size:14px; overflow-y: auto;">
-            </div>
+        <div class="card" id="local-player-list" style="flex-grow:1; font-size:14px; overflow-y: auto;"></div>
         <div class="btn-group">
             <button id="start-btn-local" class="btn btn-primary" style="display:none" onclick="startLocalGame()">НАЧАТЬ</button>
             <button class="btn btn-secondary" onclick="location.reload()">ВЫЙТИ</button>
@@ -280,11 +279,8 @@
         tg.expand();
         tg.headerColor = '#0a0a0b';
 
-        // --- ТВОЙ ID ДЛЯ АДМИНКИ ---
-        const ADMIN_ID = 000000000; // ЗАМЕНИ ЭТО ЧИСЛО НА СВОЙ ID
+        const ADMIN_ID = 000000000; // ЗАМЕНИ НА СВОЙ ID
         const myTgId = tg.initDataUnsafe?.user?.id;
-
-        // Инициализация сокета
         const socket = io("https://mafia-game-skw7.onrender.com/");
 
         let user = {
@@ -295,7 +291,6 @@
             commLuck: parseInt(localStorage.getItem('m_luck_c')) || 0
         };
 
-        // Проверка срока действия VIP при запуске
         function checkVipExpiry() {
             const expire = localStorage.getItem('m_vip_expire');
             if (expire && Date.now() > parseInt(expire)) {
@@ -307,7 +302,6 @@
         }
         checkVipExpiry();
 
-        // Добавление кнопки админа
         if (myTgId === ADMIN_ID) {
             const adminBtn = document.createElement('button');
             adminBtn.className = 'btn btn-secondary';
@@ -317,9 +311,7 @@
             adminBtn.onclick = () => {
                 const name = prompt("Введите НИК игрока:");
                 const days = prompt("На сколько ДНЕЙ выдать VIP?", "30");
-                if (name && days) {
-                    socket.emit('admin_command', { targetName: name, days: parseInt(days) });
-                }
+                if (name && days) socket.emit('admin_command', { targetName: name, days: parseInt(days) });
             };
             document.querySelector('#scr-menu .btn-group').appendChild(adminBtn);
         }
@@ -336,11 +328,8 @@
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
-
             if (id === 'scr-settings') {
-                const select = document.getElementById('inp-icon');
                 const vipLabel = document.getElementById('vip-status-text');
-                
                 if (!user.isVip) {
                     vipLabel.innerText = "LOCKED 🔒";
                     vipLabel.style.color = "var(--red)";
@@ -349,7 +338,6 @@
                     vipLabel.style.color = "var(--green)";
                 }
             }
-
             if (id === 'scr-shop') {
                 if(user.isVip) markAsPurchased('vip-check');
                 if(user.mafiaLuck > 0) markAsPurchased('luck-m-check');
@@ -367,50 +355,32 @@
         function saveSettings() {
             const selectedIcon = document.getElementById('inp-icon').value;
             const newName = document.getElementById('inp-name').value;
-
             user.name = newName;
             localStorage.setItem('m_name', user.name);
-
             if (!user.isVip && selectedIcon !== "") {
-                tg.showAlert("Иконки доступны только для VIP! Ваш ник сохранен без иконки.");
+                tg.showAlert("Иконки доступны только для VIP!");
                 user.vipIcon = "";
                 document.getElementById('inp-icon').value = "";
                 localStorage.setItem('m_icon', "");
             } else {
                 user.vipIcon = selectedIcon;
                 localStorage.setItem('m_icon', user.vipIcon);
-                tg.showAlert("Профиль успешно обновлен!");
+                tg.showAlert("Профиль сохранен!");
             }
-
             socket.emit('update_settings', { name: user.name, vipIcon: user.vipIcon });
             showScreen('scr-menu');
         }
 
-        // --- ОНЛАЙН ИГРА ---
-        function enterQueue() {
-            showScreen('scr-lobby');
-            socket.emit('join_queue', user);
-        }
-
-        socket.on('queue_size', count => {
-            document.getElementById('lobby-count').innerText = `${count} / 10`;
-        });
-
-        // --- ЛОКАЛЬНАЯ ИГРА ---
-        function createRoom() {
-            socket.emit('create_room', user);
-        }
-
+        function enterQueue() { showScreen('scr-lobby'); socket.emit('join_queue', user); }
+        function createRoom() { socket.emit('create_room', user); }
         function joinRoom() {
             const code = document.getElementById('inp-room-id').value.toUpperCase();
             if(!code) return tg.showAlert("Введите код!");
             socket.emit('join_room', { roomId: code, userData: user });
         }
+        function startLocalGame() { socket.emit('start_local_game', currentRoomId); }
 
-        function startLocalGame() {
-            socket.emit('start_local_game', currentRoomId);
-        }
-
+        socket.on('queue_size', count => { document.getElementById('lobby-count').innerText = `${count} / 10`; });
         socket.on('room_created', data => {
             currentRoomId = data.roomId;
             showScreen('scr-local-lobby');
@@ -418,11 +388,7 @@
             document.getElementById('start-btn-local').style.display = 'block';
             updateLocalPlayers(data.players);
         });
-
-        socket.on('room_update', data => {
-            showScreen('scr-local-lobby');
-            updateLocalPlayers(data.players);
-        });
+        socket.on('room_update', data => { showScreen('scr-local-lobby'); updateLocalPlayers(data.players); });
 
         function updateLocalPlayers(players) {
             const list = document.getElementById('local-player-list');
@@ -434,7 +400,6 @@
             `).join('');
         }
 
-        // --- ИГРОВАЯ ЛОГИКА ---
         socket.on('start_game', data => {
             myRole = data.role;
             myId = data.myId;
@@ -445,9 +410,7 @@
             updatePhaseUI({phase: data.phase || 'night', activeRole: data.activeRole || 'mafia'});
         });
 
-        socket.on('change_phase', data => {
-            updatePhaseUI(data);
-        });
+        socket.on('change_phase', data => { updatePhaseUI(data); });
 
         function updatePhaseUI(data) {
             const phase = typeof data === 'string' ? data : data.phase;
@@ -460,38 +423,20 @@
             const targets = playerList.filter(p => p.id !== myId);
             if (phase === 'night') {
                 if (myRole === activeRole) {
-                    if (myRole === 'mafia') {
-                        const tray = document.getElementById('mafia-targets');
-                        tray.innerHTML = "";
-                        targets.forEach(p => {
-                            tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('kill', '${p.id}', '${p.name}')">${p.name}</button>`;
-                        });
-                        document.getElementById('mafia-ui').style.display = 'block';
-                    } else if (myRole === 'comm') {
-                        const tray = document.getElementById('comm-targets');
-                        tray.innerHTML = "";
-                        targets.forEach(p => {
-                            tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('check', '${p.id}', '${p.name}')">${p.name}</button>`;
-                        });
-                        document.getElementById('comm-ui').style.display = 'block';
-                    } else if (myRole === 'doc') {
-                        const tray = document.getElementById('doc-targets');
-                        tray.innerHTML = "";
-                        targets.forEach(p => {
-                            tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('heal', '${p.id}', '${p.name}')">${p.name}</button>`;
-                        });
-                        tray.innerHTML += `<button class="btn btn-primary" style="background:var(--green); grid-column: span 2;" onclick="abilityAction('heal', '${myId}', 'Себя')">ВЫЛЕЧИТЬ СЕБЯ</button>`;
-                        document.getElementById('doc-ui').style.display = 'block';
-                    }
-                } else {
-                    addMsg(`Сейчас ход: ${activeRole.toUpperCase()}...`, true);
-                }
+                    let trayId = myRole === 'mafia' ? 'mafia-targets' : (myRole === 'comm' ? 'comm-targets' : 'doc-targets');
+                    let trayWrap = myRole === 'mafia' ? 'mafia-ui' : (myRole === 'comm' ? 'comm-ui' : 'doc-ui');
+                    const tray = document.getElementById(trayId);
+                    tray.innerHTML = "";
+                    targets.forEach(p => {
+                        tray.innerHTML += `<button class="btn btn-secondary" onclick="abilityAction('${myRole==='mafia'?'kill':(myRole==='comm'?'check':'heal')}', '${p.id}', '${p.name}')">${p.name}</button>`;
+                    });
+                    if(myRole === 'doc') tray.innerHTML += `<button class="btn btn-primary" style="background:var(--green); grid-column: span 2;" onclick="abilityAction('heal', '${myId}', 'Себя')">ВЫЛЕЧИТЬ СЕБЯ</button>`;
+                    document.getElementById(trayWrap).style.display = 'block';
+                } else { addMsg(`Сейчас ход: ${activeRole.toUpperCase()}...`, true); }
             } else {
                 const tray = document.getElementById('vote-targets');
                 tray.innerHTML = "";
-                targets.forEach(p => {
-                    tray.innerHTML += `<button class="btn btn-secondary" onclick="voteAction('${p.id}')">${p.name}</button>`;
-                });
+                targets.forEach(p => { tray.innerHTML += `<button class="btn btn-secondary" onclick="voteAction('${p.id}')">${p.name}</button>`; });
                 document.getElementById('vote-ui').style.display = 'block';
             }
         }
@@ -508,39 +453,14 @@
             addMsg("Голос засчитан.", true);
         }
 
-        // --- ПЕРЕРАБОТАННАЯ ОПЛАТА ДЛЯ УЗБЕКИСТАНА ---
+        // --- УДАЛЕНО ОКНО С КАРТОЙ, ОСТАВЛЕН ТОЛЬКО ВЫЗОВ СЕРВЕРА ---
         function initStarsPayment(type, amount) {
-            const adminUsername = "ТВОЙ_НИК"; // ЗАМЕНИ НА СВОЙ НИК БЕЗ @
-            const cardDetails = "8600 0000 0000 0000"; // ТВОЯ КАРТА
-            const cardOwner = "ИМЯ ФАМИЛИЯ"; // ТВОЕ ИМЯ
-
-            const message = `🌟 ПОКУПКА: ${type.toUpperCase()}\n` +
-                            `💰 СУММА: ${amount} ⭐ (или эквивалент в сумах)\n\n` +
-                            `💳 ПЕРЕВОД НА КАРТУ:\n${cardDetails}\n👤 ${cardOwner}\n\n` +
-                            `После оплаты отправьте скриншот чека админу.`;
-
-            tg.showPopup({
-                title: 'Оплата товара',
-                message: message,
-                buttons: [
-                    {id: 'contact', type: 'default', text: 'Связаться с админом'},
-                    {id: 'cancel', type: 'destructive', text: 'Закрыть'}
-                ]
-            }, function(buttonId) {
-                if (buttonId === 'contact') {
-                    tg.openTelegramLink('https://t.me/' + adminUsername);
-                }
-            });
-            
             socket.emit('create_invoice', { type, amount }); 
         }
 
-        // Старый обработчик оставляем для совместимости, если Stars когда-то включатся
         socket.on('invoice_ready', (data) => {
             tg.openInvoice(data.url, (status) => {
-                if (status === 'paid') {
-                    applyPurchase(data.type);
-                }
+                if (status === 'paid') { applyPurchase(data.type); }
             });
         });
 
@@ -553,26 +473,15 @@
 
         function sendChat() {
             const inp = document.getElementById('chat-input');
-            const val = inp.value;
-            if (val && isAlive) {
-                socket.emit('send_msg', val);
-                inp.value = "";
-            }
+            if (inp.value && isAlive) { socket.emit('send_msg', inp.value); inp.value = ""; }
         }
 
-        // Прием VIP от админа с проверкой срока
         socket.on('receive_vip', (data) => {
             localStorage.setItem('m_vip', 'true');
             localStorage.setItem('m_vip_expire', data.expire); 
             user.isVip = true;
-            
-            tg.showPopup({
-                title: '👑 VIP СТАТУС',
-                message: `Администратор активировал вам VIP на ${data.days} дн.!\nТеперь вам доступны золотые иконки в настройках.`,
-                buttons: [{type: 'ok'}]
-            }, () => {
-                location.reload(); 
-            });
+            tg.showAlert(`Админ выдал VIP на ${data.days} дн.!`);
+            location.reload();
         });
 
         socket.on('new_msg', d => {
@@ -595,8 +504,7 @@
         });
 
         socket.on('game_over', data => {
-            const over = document.getElementById('win-overlay');
-            over.style.display = 'flex';
+            document.getElementById('win-overlay').style.display = 'flex';
             document.getElementById('win-title').innerText = data.winner === 'mafia' ? "ПОБЕДА МАФИИ" : "ПОБЕДА МИРНЫХ";
         });
 
