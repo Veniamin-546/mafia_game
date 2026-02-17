@@ -280,6 +280,10 @@
         tg.expand();
         tg.headerColor = '#0a0a0b';
 
+        // --- ТВОЙ ID ДЛЯ АДМИНКИ ---
+        const ADMIN_ID = 000000000; // ЗАМЕНИ ЭТО ЧИСЛО НА СВОЙ ID
+        const myTgId = tg.initDataUnsafe?.user?.id;
+
         // Инициализация сокета
         const socket = io("https://mafia-game-skw7.onrender.com/");
 
@@ -290,6 +294,35 @@
             mafiaLuck: parseInt(localStorage.getItem('m_luck_m')) || 0,
             commLuck: parseInt(localStorage.getItem('m_luck_c')) || 0
         };
+
+        // Проверка срока действия VIP при запуске
+        function checkVipExpiry() {
+            const expire = localStorage.getItem('m_vip_expire');
+            if (expire && Date.now() > parseInt(expire)) {
+                localStorage.setItem('m_vip', 'false');
+                localStorage.removeItem('m_vip_expire');
+                user.isVip = false;
+                tg.showAlert("Срок действия вашего VIP-статуса истек.");
+            }
+        }
+        checkVipExpiry();
+
+        // Добавление кнопки админа
+        if (myTgId === ADMIN_ID) {
+            const adminBtn = document.createElement('button');
+            adminBtn.className = 'btn btn-secondary';
+            adminBtn.style.borderColor = 'var(--gold)';
+            adminBtn.style.marginTop = '10px';
+            adminBtn.innerText = '⚡ АДМИН-ПАНЕЛЬ';
+            adminBtn.onclick = () => {
+                const name = prompt("Введите НИК игрока:");
+                const days = prompt("На сколько ДНЕЙ выдать VIP?", "30");
+                if (name && days) {
+                    socket.emit('admin_command', { targetName: name, days: parseInt(days) });
+                }
+            };
+            document.querySelector('#scr-menu .btn-group').appendChild(adminBtn);
+        }
 
         let myRole = "";
         let myId = "";
@@ -522,25 +555,24 @@
             const inp = document.getElementById('chat-input');
             const val = inp.value;
             if (val && isAlive) {
-                // СЕКРЕТНАЯ КОМАНДА ДЛЯ ТЕБЯ (АДМИНА)
-                // Если ты напишешь в чат: /givevip ИМЯ - игрок получит VIP
-                if (val.startsWith('/givevip ')) {
-                    const targetName = val.replace('/givevip ', '').trim();
-                    socket.emit('admin_command', { cmd: 'give_vip', target: targetName });
-                    addMsg("Команда отправлена...", true);
-                } else {
-                    socket.emit('send_msg', val);
-                }
+                socket.emit('send_msg', val);
                 inp.value = "";
             }
         }
 
-        // Прием VIP от админа
-        socket.on('receive_vip', () => {
+        // Прием VIP от админа с проверкой срока
+        socket.on('receive_vip', (data) => {
             localStorage.setItem('m_vip', 'true');
+            localStorage.setItem('m_vip_expire', data.expire); 
             user.isVip = true;
-            tg.showAlert("🌟 АДМИНИСТРАТОР ВЫДАЛ ВАМ VIP-СТАТУС!");
-            location.reload();
+            
+            tg.showPopup({
+                title: '👑 VIP СТАТУС',
+                message: `Администратор активировал вам VIP на ${data.days} дн.!\nТеперь вам доступны золотые иконки в настройках.`,
+                buttons: [{type: 'ok'}]
+            }, () => {
+                location.reload(); 
+            });
         });
 
         socket.on('new_msg', d => {
