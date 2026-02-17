@@ -274,22 +274,77 @@
         <button class="btn btn-primary" style="width: 200px;" onclick="location.reload()">В МЕНЮ</button>
     </div>
 
+    <div id="admin-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 10000; justify-content: center; align-items: center;">
+        <div class="card" style="width: 90%; max-width: 400px; border-color: var(--gold); position: relative; box-shadow: 0 0 20px rgba(255, 183, 3, 0.2);">
+            <div style="font-family: 'Cinzel'; color: var(--gold); font-size: 20px; text-align: center; margin-bottom: 20px; letter-spacing: 2px;">ADMIN COMMAND</div>
+            <label style="font-size: 10px; opacity: 0.5; display: block; margin-bottom: 5px;">TELEGRAM ID ИГРОКА</label>
+            <input type="number" id="adm-target-id" placeholder="ID из лобби..." style="margin-bottom: 15px;">
+            <label style="font-size: 10px; opacity: 0.5; display: block; margin-bottom: 5px;">СРОК (ДНЕЙ)</label>
+            <input type="number" id="adm-days" value="30" style="margin-bottom: 20px;">
+            <div class="btn-group">
+                <button class="btn btn-gold" onclick="confirmAdminAction()">ВЫДАТЬ VIP 👑</button>
+                <button class="btn btn-secondary" onclick="closeAdminModal()">ОТМЕНА</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
         tg.headerColor = '#0a0a0b';
 
-        const ADMIN_ID = 927590102; // ЗАМЕНИ НА СВОЙ ID
+        const ADMIN_ID = 927590102; 
         const myTgId = tg.initDataUnsafe?.user?.id;
         const socket = io("https://mafia-game-skw7.onrender.com/");
 
         let user = {
-            userId: myTgId, // Добавлено поле userId
+            userId: myTgId, 
             name: localStorage.getItem('m_name') || tg.initDataUnsafe?.user?.first_name || "Gamer",
             vipIcon: localStorage.getItem('m_icon') || "👑",
             isVip: localStorage.getItem('m_vip') === 'true',
             mafiaLuck: parseInt(localStorage.getItem('m_luck_m')) || 0,
             commLuck: parseInt(localStorage.getItem('m_luck_c')) || 0
+        };
+
+        // --- ЛОГИКА АДМИН-ПАНЕЛИ ---
+        function openAdminModal() { document.getElementById('admin-modal').style.display = 'flex'; }
+        function closeAdminModal() { document.getElementById('admin-modal').style.display = 'none'; }
+        
+        function confirmAdminAction() {
+            const targetId = document.getElementById('adm-target-id').value;
+            const days = document.getElementById('adm-days').value;
+            if (!targetId || !days) return tg.showAlert("Заполни все поля!");
+            
+            socket.emit('admin_command', { 
+                adminKey: myTgId,
+                targetUserId: parseInt(targetId), 
+                days: parseInt(days) 
+            });
+            closeAdminModal();
+            tg.showConfirm("Команда отправлена. Перезагрузить игру?", (ok) => { if(ok) location.reload(); });
+        }
+
+        if (myTgId === ADMIN_ID || !myTgId) { 
+            window.addEventListener('load', () => {
+                const menu = document.querySelector('#scr-menu .btn-group');
+                if (menu) {
+                    const adminBtn = document.createElement('button');
+                    adminBtn.className = 'btn btn-secondary';
+                    adminBtn.style.border = '1px solid var(--gold)';
+                    adminBtn.style.color = 'var(--gold)';
+                    adminBtn.style.marginTop = '10px';
+                    adminBtn.innerHTML = '<span style="margin-right:8px;">⚡</span> ПАНЕЛЬ УПРАВЛЕНИЯ';
+                    adminBtn.onclick = openAdminModal;
+                    menu.appendChild(adminBtn);
+                }
+            });
+        }
+        
+        // Секретный вход (5 кликов по заголовку)
+        let mafiaClicks = 0;
+        document.querySelector('h1').onclick = () => {
+            mafiaClicks++;
+            if (mafiaClicks >= 5) { openAdminModal(); mafiaClicks = 0; }
         };
 
         function checkVipExpiry() {
@@ -302,27 +357,6 @@
             }
         }
         checkVipExpiry();
-
-        // ОБНОВЛЕННАЯ АДМИНКА (теперь запрашивает ID)
-        if (myTgId === ADMIN_ID) {
-            const adminBtn = document.createElement('button');
-            adminBtn.className = 'btn btn-secondary';
-            adminBtn.style.borderColor = 'var(--gold)';
-            adminBtn.style.marginTop = '10px';
-            adminBtn.innerText = '⚡ АДМИН-ПАНЕЛЬ';
-            adminBtn.onclick = () => {
-                const targetId = prompt("Введите TELEGRAM ID игрока (его можно увидеть в лобби):");
-                const days = prompt("На сколько ДНЕЙ выдать VIP?", "30");
-                if (targetId && days) {
-                    socket.emit('admin_command', { 
-                        adminKey: myTgId,
-                        targetUserId: parseInt(targetId), 
-                        days: parseInt(days) 
-                    });
-                }
-            };
-            document.querySelector('#scr-menu .btn-group').appendChild(adminBtn);
-        }
 
         let myRole = "";
         let myId = "";
@@ -398,7 +432,6 @@
         });
         socket.on('room_update', data => { showScreen('scr-local-lobby'); updateLocalPlayers(data.players); });
 
-        // ОБНОВЛЕНО: теперь отображает ID игроков в лобби
         function updateLocalPlayers(players) {
             const list = document.getElementById('local-player-list');
             list.innerHTML = players.map(p => `
@@ -533,7 +566,6 @@
             flow.scrollTop = flow.scrollHeight;
         }
 
-        // Авто-инициализация при старте
         socket.on('connect', () => {
             console.log("Connected as ID:", myTgId);
         });
