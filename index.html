@@ -114,6 +114,7 @@
             font-size: 14px; 
             line-height: 1.5;
             border: 1px solid var(--border);
+            word-wrap: break-word;
         }
         .bubble.me { align-self: flex-end; border-radius: 20px 20px 4px 20px; background: rgba(230, 57, 70, 0.1); border-color: rgba(230, 57, 70, 0.2); }
         .bubble b { color: var(--red); display: block; font-size: 11px; margin-bottom: 2px; }
@@ -257,7 +258,7 @@
 
         <div style="display: flex; gap: 10px;">
             <input type="text" id="chat-input" placeholder="Введите сообщение...">
-            <button class="btn btn-primary" style="width: 60px; padding: 0;" onclick="sendChat()">📡</button>
+            <button class="btn btn-primary" id="send-chat-btn" style="width: 60px; padding: 0;" onclick="sendChat()">📡</button>
         </div>
     </div>
 
@@ -306,7 +307,7 @@
             commLuck: parseInt(localStorage.getItem('m_luck_c')) || 0
         };
 
-        // --- ЛОГИКА АДМИН-ПАНЕЛИ ---
+        // --- ADMIN PANEL LOGIC ---
         function openAdminModal() { document.getElementById('admin-modal').style.display = 'flex'; }
         function closeAdminModal() { document.getElementById('admin-modal').style.display = 'none'; }
         
@@ -324,6 +325,13 @@
             tg.showConfirm("Команда отправлена. Перезагрузить игру?", (ok) => { if(ok) location.reload(); });
         }
 
+        // Secret access: 5 clicks on title
+        let mafiaClicks = 0;
+        document.querySelector('h1').onclick = () => {
+            mafiaClicks++;
+            if (mafiaClicks >= 5) { openAdminModal(); mafiaClicks = 0; }
+        };
+
         if (myTgId === ADMIN_ID || !myTgId) { 
             window.addEventListener('load', () => {
                 const menu = document.querySelector('#scr-menu .btn-group');
@@ -340,13 +348,6 @@
             });
         }
         
-        // Секретный вход (5 кликов по заголовку)
-        let mafiaClicks = 0;
-        document.querySelector('h1').onclick = () => {
-            mafiaClicks++;
-            if (mafiaClicks >= 5) { openAdminModal(); mafiaClicks = 0; }
-        };
-
         function checkVipExpiry() {
             const expire = localStorage.getItem('m_vip_expire');
             if (expire && Date.now() > parseInt(expire)) {
@@ -423,6 +424,7 @@
         function startLocalGame() { socket.emit('start_local_game', currentRoomId); }
 
         socket.on('queue_size', count => { document.getElementById('lobby-count').innerText = `${count} / 10`; });
+        
         socket.on('room_created', data => {
             currentRoomId = data.roomId;
             showScreen('scr-local-lobby');
@@ -430,14 +432,16 @@
             document.getElementById('start-btn-local').style.display = 'block';
             updateLocalPlayers(data.players);
         });
+
         socket.on('room_update', data => { showScreen('scr-local-lobby'); updateLocalPlayers(data.players); });
 
         function updateLocalPlayers(players) {
             const list = document.getElementById('local-player-list');
             list.innerHTML = players.map(p => `
-                <div style="padding:10px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:4px;">
+                <div style="padding:10px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:4px;" 
+                     onclick="document.getElementById('adm-target-id').value='${p.userId || ''}'">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span>${p.isVip ? p.vipIcon : '👤'} ${p.name}</span>
+                        <span>${p.isVip ? (p.vipIcon || '👑') : '👤'} ${p.name}</span>
                         <span style="opacity:0.5; font-size:10px;">${p.isHost ? 'HOST' : 'READY'}</span>
                     </div>
                     <span style="color:gray; font-size:9px;">ID: ${p.userId || 'hidden'}</span>
@@ -452,6 +456,7 @@
             isAlive = true;
             document.getElementById('role-tag').innerText = "ВЫ: " + myRole.toUpperCase();
             showScreen('scr-game');
+            addMsg(`Игра началась! Ваша роль: ${myRole.toUpperCase()}`, true);
             updatePhaseUI({phase: data.phase || 'night', activeRole: data.activeRole || 'mafia'});
         });
 
@@ -461,11 +466,21 @@
             const phase = typeof data === 'string' ? data : data.phase;
             const activeRole = data.activeRole || '';
             const pt = document.getElementById('phase-tag');
+            
+            // UI Phase updates
             pt.innerText = phase === 'day' ? "☀️ ДЕНЬ" : "🌙 НОЧЬ";
             pt.style.color = phase === 'day' ? "var(--gold)" : "var(--red)";
             document.querySelectorAll('.action-tray').forEach(t => t.style.display = 'none');
-            if (!isAlive) return;
-            const targets = playerList.filter(p => p.id !== myId);
+            
+            if (!isAlive) {
+                document.getElementById('chat-input').disabled = true;
+                document.getElementById('chat-input').placeholder = "Мертвые не говорят...";
+                document.getElementById('send-chat-btn').style.opacity = '0.3';
+                return;
+            }
+
+            const targets = playerList.filter(p => p.id !== myId && p.isAlive !== false);
+            
             if (phase === 'night') {
                 if (myRole === activeRole) {
                     let trayId = myRole === 'mafia' ? 'mafia-targets' : (myRole === 'comm' ? 'comm-targets' : 'doc-targets');
@@ -477,7 +492,9 @@
                     });
                     if(myRole === 'doc') tray.innerHTML += `<button class="btn btn-primary" style="background:var(--green); grid-column: span 2;" onclick="abilityAction('heal', '${myId}', 'Себя')">ВЫЛЕЧИТЬ СЕБЯ</button>`;
                     document.getElementById(trayWrap).style.display = 'block';
-                } else { addMsg(`Сейчас ход: ${activeRole.toUpperCase()}...`, true); }
+                } else { 
+                    addMsg(`Сейчас ход: ${activeRole.toUpperCase()}...`, true); 
+                }
             } else {
                 const tray = document.getElementById('vote-targets');
                 tray.innerHTML = "";
@@ -498,9 +515,63 @@
             addMsg("Голос засчитан.", true);
         }
 
-        function initStarsPayment(type, amount) {
-            socket.emit('create_invoice', { type, amount }); 
+        // --- CHAT LOGIC ---
+        function sendChat() {
+            const inp = document.getElementById('chat-input');
+            if (inp.value && isAlive) { 
+                socket.emit('send_msg', { text: inp.value, isVip: user.isVip, vipIcon: user.vipIcon }); 
+                inp.value = ""; 
+            }
         }
+
+        socket.on('new_msg', d => {
+            const flow = document.getElementById('chat-flow');
+            const div = document.createElement('div');
+            const isMe = d.user === user.name;
+            div.className = `bubble ${isMe ? 'me' : ''}`;
+            div.innerHTML = `<b>${d.isVip ? (d.vipIcon || '👑') : ''} ${d.user}</b>${d.text}`;
+            flow.appendChild(div);
+            flow.scrollTop = flow.scrollHeight;
+        });
+
+        // --- GAME EVENTS ---
+        socket.on('game_event', data => {
+            if (data.type === 'attack') {
+                addMsg(`Ночная сводка: ${data.victimName} был атакован.`, true);
+                if (data.victimId === myId && !data.saved) {
+                    isAlive = false;
+                    document.getElementById('death-overlay').style.display = 'flex';
+                }
+            }
+            if (data.type === 'check_result' && myRole === 'comm') {
+                tg.showAlert(`Результат проверки: ${data.targetName} — ${data.isMafia ? 'МАФИЯ' : 'ЧИСТ'}`);
+                addMsg(`Результат проверки: ${data.targetName} - ${data.isMafia ? 'МАФИЯ' : 'ЧИСТ'}`, true);
+            }
+        });
+
+        socket.on('game_over', data => {
+            document.getElementById('win-overlay').style.display = 'flex';
+            document.getElementById('win-title').innerText = data.winner === 'mafia' ? "ПОБЕДА МАФИИ" : "ПОБЕДА МИРНЫХ";
+            document.getElementById('win-desc').innerText = data.reason || "Город определил свою судьбу.";
+        });
+
+        socket.on('sys_msg', m => {
+            const filters = ['счет', 'оплата', 'invoice', 'звезды', 'stars'];
+            if(!filters.some(word => m.toLowerCase().includes(word))) addMsg(m, true);
+        });
+
+        function addMsg(text, isSys) {
+            const flow = document.getElementById('chat-flow');
+            if(!flow) return;
+            const div = document.createElement('div');
+            div.className = isSys ? "bubble sys" : "bubble";
+            div.innerText = text;
+            flow.appendChild(div);
+            flow.scrollTop = flow.scrollHeight;
+        }
+
+        // --- SHOP & VIP ---
+        function initStarsPayment(type, amount) { socket.emit('create_invoice', { type, amount }); }
 
         socket.on('invoice_ready', (data) => {
             tg.openInvoice(data.url, (status) => {
@@ -515,11 +586,6 @@
             tg.showConfirm("Покупка активирована! Перезагрузить?", (ok) => { if(ok) location.reload(); });
         }
 
-        function sendChat() {
-            const inp = document.getElementById('chat-input');
-            if (inp.value && isAlive) { socket.emit('send_msg', inp.value); inp.value = ""; }
-        }
-
         socket.on('receive_vip', (data) => {
             localStorage.setItem('m_vip', 'true');
             localStorage.setItem('m_vip_expire', data.expire); 
@@ -528,47 +594,7 @@
             location.reload();
         });
 
-        socket.on('new_msg', d => {
-            const flow = document.getElementById('chat-flow');
-            const div = document.createElement('div');
-            div.className = `bubble ${d.user === user.name ? 'me' : ''}`;
-            div.innerHTML = `<b>${d.isVip ? d.vipIcon : ''} ${d.user}</b>${d.text}`;
-            flow.appendChild(div);
-            flow.scrollTop = flow.scrollHeight;
-        });
-
-        socket.on('game_event', data => {
-            if (data.type === 'attack') {
-                addMsg(`Ночная сводка: атакован ${data.victimName}.`, true);
-                if (data.victimId === myId) {
-                    isAlive = false;
-                    document.getElementById('death-overlay').style.display = 'flex';
-                }
-            }
-        });
-
-        socket.on('game_over', data => {
-            document.getElementById('win-overlay').style.display = 'flex';
-            document.getElementById('win-title').innerText = data.winner === 'mafia' ? "ПОБЕДА МАФИИ" : "ПОБЕДА МИРНЫХ";
-        });
-
-        socket.on('sys_msg', m => {
-            const filters = ['счет', 'оплата', 'invoice', 'звезды', 'stars'];
-            if(!filters.some(word => m.toLowerCase().includes(word))) addMsg(m, true);
-        });
-
-        function addMsg(text, isSys) {
-            const flow = document.getElementById('chat-flow');
-            const div = document.createElement('div');
-            div.className = isSys ? "bubble sys" : "bubble";
-            div.innerText = text;
-            flow.appendChild(div);
-            flow.scrollTop = flow.scrollHeight;
-        }
-
-        socket.on('connect', () => {
-            console.log("Connected as ID:", myTgId);
-        });
+        socket.on('connect', () => { console.log("Socket Connected:", myTgId); });
     </script>
 </body>
 </html>
