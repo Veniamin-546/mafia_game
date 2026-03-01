@@ -29,6 +29,22 @@
             height: 100vh;
         }
 
+        /* --- BALANCE BADGE --- */
+        #user-balance {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(5px);
+        }
+
         /* --- SCREENS --- */
         .screen {
             display: none;
@@ -138,13 +154,18 @@
 
     <div class="bg-glow"></div>
 
+    <div id="user-balance">
+        <span style="color: var(--gold); font-weight: 800; font-size: 14px;" id="balance-amount">0</span>
+        <span style="font-size: 12px;">⭐</span>
+    </div>
+
     <div id="scr-menu" class="screen active">
         <h1>MAFIA</h1>
         <div class="subtitle">Shadow of Justice</div>
         <div class="btn-group">
             <button class="btn btn-primary" onclick="enterQueue()">ОНЛАЙН ИГРА</button>
             <button class="btn btn-secondary" onclick="showScreen('scr-local-menu')">ЛОКАЛЬНО</button>
-            <button class="btn btn-gold" onclick="tg.showAlert('🏪 Магазин временно закрыт на техническое обслуживание. Приходите позже!')">МАГАЗИН ⭐</button>
+            <button class="btn btn-gold" onclick="showScreen('scr-shop')">МАГАЗИН ⭐</button>
             <button class="btn btn-secondary" onclick="showScreen('scr-settings')">НАСТРОЙКИ</button>
         </div>
     </div>
@@ -174,6 +195,10 @@
 
     <div id="scr-settings" class="screen">
         <h1>PROFILE</h1>
+        <div class="card" style="border-color: var(--gold); display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-size: 12px; opacity: 0.5;">МОЙ БАЛАНС</label>
+            <b style="color: var(--gold);" id="settings-balance">0 ⭐</b>
+        </div>
         <div class="card">
             <label style="font-size: 12px; opacity: 0.5;">ИМЯ В ИГРЕ</label>
             <input type="text" id="inp-name" maxlength="15" placeholder="Введите ник...">
@@ -304,7 +329,8 @@
             vipIcon: localStorage.getItem('m_icon') || "👑",
             isVip: localStorage.getItem('m_vip') === 'true',
             mafiaLuck: parseInt(localStorage.getItem('m_luck_m')) || 0,
-            commLuck: parseInt(localStorage.getItem('m_luck_c')) || 0
+            commLuck: parseInt(localStorage.getItem('m_luck_c')) || 0,
+            balance: parseInt(localStorage.getItem('m_balance')) || 0 // ADDED LOCAL BALANCE
         };
 
         // --- ADMIN PANEL LOGIC ---
@@ -367,10 +393,17 @@
 
         document.getElementById('inp-name').value = user.name;
         document.getElementById('inp-icon').value = user.vipIcon;
+        // INITIAL BALANCE SYNC
+        document.getElementById('balance-amount').innerText = user.balance;
+        document.getElementById('settings-balance').innerText = user.balance + " ⭐";
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+            
+            // HIDE BALANCE IN GAME SCREEN
+            document.getElementById('user-balance').style.display = (id === 'scr-game') ? 'none' : 'flex';
+
             if (id === 'scr-settings') {
                 const vipLabel = document.getElementById('vip-status-text');
                 if (!user.isVip) {
@@ -380,6 +413,7 @@
                     vipLabel.innerText = "ACTIVE ✅";
                     vipLabel.style.color = "var(--green)";
                 }
+                document.getElementById('settings-balance').innerText = user.balance + " ⭐";
             }
             if (id === 'scr-shop') {
                 if(user.isVip) markAsPurchased('vip-check');
@@ -594,7 +628,19 @@
             location.reload();
         });
 
-        socket.on('connect', () => { console.log("Socket Connected:", myTgId); });
+        // SYNC BALANCE FROM SERVER
+        socket.on('balance_update', (newBalance) => {
+            user.balance = newBalance;
+            localStorage.setItem('m_balance', newBalance);
+            document.getElementById('balance-amount').innerText = newBalance;
+            const settingsBal = document.getElementById('settings-balance');
+            if(settingsBal) settingsBal.innerText = newBalance + " ⭐";
+        });
+
+        socket.on('connect', () => { 
+            console.log("Socket Connected:", myTgId); 
+            socket.emit('get_user_data', myTgId); // REQUEST DATA ON START
+        });
     </script>
 </body>
 </html>
