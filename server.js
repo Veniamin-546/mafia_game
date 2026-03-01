@@ -7,6 +7,10 @@ const BOT_TOKEN = process.env.BOT_TOKEN || '8577050382:AAHOorg_1VdNppZJYkWSqscIl
 const ADMIN_TG_ID = 927590102; 
 const IS_SHOP_OPEN = false; // ТУТ МОЖНО ВКЛЮЧИТЬ/ВЫКЛЮЧИТЬ МАГАЗИН
 
+// --- КОНСТАНТЫ ТАЙМЕРОВ ---
+const NIGHT_DURATION = 30000; // 30 секунд на ночь
+const DAY_DURATION = 60000;   // 60 секунд на обсуждение и голос
+
 // --- НОВАЯ ЛОГИКА: ОБРАБОТКА ТЕЛЕГРАМ-СООБЩЕНИЙ ---
 let lastUpdateId = 0;
 async function handleTelegramUpdates() {
@@ -100,6 +104,7 @@ function applyBonusToSocket(targetId, type, isByUserId = false, amount = 0) {
         }
         
         targetSocket.emit('user_data_updated', targetSocket.userData);
+        console.log(`[ADMIN] Bonus ${type} applied to ${targetId}`);
         return true;
     }
     return false;
@@ -123,6 +128,15 @@ const NIGHT_ORDER = ['mafia', 'comm', 'doc'];
 
 function generateRoomCode() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ТАЙМЕРА ---
+function setRoomTimer(roomId, duration, callback) {
+    if (rooms[roomId]) {
+        if (rooms[roomId].timer) clearTimeout(rooms[roomId].timer);
+        rooms[roomId].timer = setTimeout(callback, duration);
+        io.to(roomId).emit('timer_sync', { duration: duration / 1000 });
+    }
 }
 
 io.on('connection', (socket) => {
@@ -221,7 +235,7 @@ io.on('connection', (socket) => {
         if (!socket.userData.userId) socket.userData.userId = Math.floor(100000 + Math.random() * 900000);
         if (!socket.userData.coins) socket.userData.coins = 0;
         socket.isHost = true;
-        rooms[roomId] = { players: [socket.id], phase: 'lobby', isLocal: true, hostId: socket.id, nightActions: { killId: null, saveId: null }, votes: {} };
+        rooms[roomId] = { players: [socket.id], phase: 'lobby', isLocal: true, hostId: socket.id, nightActions: { killId: null, saveId: null }, votes: {}, timer: null };
         socket.roomId = roomId;
         socket.join(roomId);
         socket.emit('room_created', { roomId, players: [{ id: socket.id, userId: socket.userData.userId, name: userData.name, isVip: userData.isVip, vipIcon: userData.isVip ? userData.vipIcon : null, isHost: true }] });
@@ -267,7 +281,7 @@ io.on('connection', (socket) => {
             const playersSockets = [];
             for(let i=0; i<10; i++) playersSockets.push(queue.shift());
             const roomId = `online_${Date.now()}`;
-            rooms[roomId] = { players: playersSockets.map(p => p.id), phase: 'night', activeRole: 'mafia', nightActions: { killId: null, saveId: null }, votes: {}, aliveCount: 10 };
+            rooms[roomId] = { players: playersSockets.map(p => p.id), phase: 'night', activeRole: 'mafia', nightActions: { killId: null, saveId: null }, votes: {}, aliveCount: 10, timer: null };
             playersSockets.forEach(p => { p.roomId = roomId; p.join(roomId); });
             startGameForRoom(roomId);
             io.emit('queue_size', queue.length);
@@ -278,6 +292,8 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return;
         const playersSockets = room.players.map(id => io.sockets.sockets.get(id)).filter(s => s);
+        
+        // Сортировка по весу для ролей
         playersSockets.sort((a, b) => {
             const getWeight = (s) => {
                 let weight = 0;
@@ -287,35 +303,60 @@ io.on('connection', (socket) => {
             };
             return getWeight(b) - getWeight(a);
         });
+
         playersSockets.forEach((p, idx) => {
             p.isAlive = true;
             if (idx === 0) p.role = 'mafia';
             else if (idx === 1) p.role = 'comm';
             else if (idx === 2 && playersSockets.length > 3) p.role = 'doc';
             else p.role = 'citizen';
+            
             if (p.userData.luckGamesLeft > 0) {
                 p.userData.luckGamesLeft -= 1;
                 p.emit('user_data_updated', p.userData);
             }
         });
+
         const frontendPlayers = [...playersSockets].sort(() => Math.random() - 0.5);
         room.phase = 'night';
         room.activeRole = 'mafia';
         room.aliveCount = playersSockets.length;
+        
         playersSockets.forEach(p => {
-            p.emit('start_game', { room: roomId, role: p.role, myId: p.id, phase: 'night', activeRole: 'mafia', players: frontendPlayers.map(pl => ({ id: pl.id, userId: pl.userData.userId, name: pl.userData.name, isVip: pl.userData.isVip, vipIcon: pl.userData.isVip ? pl.userData.vipIcon : null })) });
+            p.emit('start_game', { 
+                room: roomId, 
+                role: p.role, 
+                myId: p.id, 
+                phase: 'night', 
+                activeRole: 'mafia', 
+                players: frontendPlayers.map(pl => ({ 
+                    id: pl.id, 
+                    userId: pl.userData.userId, 
+                    name: pl.userData.name, 
+                    isVip: pl.userData.isVip, 
+                    vipIcon: pl.userData.isVip ? pl.userData.vipIcon : null 
+                })) 
+            });
         });
+
+        // Запуск авто-таймера ночи
+        setRoomTimer(roomId, NIGHT_DURATION, () => finishNight(roomId));
     }
 
     socket.on('night_action', (data) => {
         const room = rooms[socket.roomId];
         if (!room || room.phase !== 'night' || socket.role !== room.activeRole) return;
-        if (socket.role === 'mafia' && data.action === 'kill') { room.nightActions.killId = data.targetId; room.nightActions.victimName = data.targetName; }
+        
+        if (socket.role === 'mafia' && data.action === 'kill') { 
+            room.nightActions.killId = data.targetId; 
+            room.nightActions.victimName = data.targetName; 
+        }
         if (socket.role === 'comm' && data.action === 'check') {
             const target = io.sockets.sockets.get(data.targetId);
             socket.emit('sys_msg', `🔍 Результат: ${data.targetName} - ${target && target.role === 'mafia' ? 'МАФИЯ' : 'МИРНЫЙ'}`);
         }
         if (socket.role === 'doc' && data.action === 'heal') room.nightActions.saveId = data.targetId;
+        
         advanceNightTurn(socket.roomId);
     });
 
@@ -323,24 +364,50 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if(!room) return;
         const currentIndex = NIGHT_ORDER.indexOf(room.activeRole);
+        
         if (currentIndex < NIGHT_ORDER.length - 1) {
             room.activeRole = NIGHT_ORDER[currentIndex + 1];
             const nextPlayer = room.players.map(pid => io.sockets.sockets.get(pid)).find(s => s && s.role === room.activeRole && s.isAlive);
-            if (nextPlayer) io.to(roomId).emit('change_phase', { phase: 'night', activeRole: room.activeRole });
-            else advanceNightTurn(roomId);
-        } else finishNight(roomId);
+            if (nextPlayer) {
+                io.to(roomId).emit('change_phase', { phase: 'night', activeRole: room.activeRole });
+                // Сбрасываем и обновляем таймер для следующей роли
+                setRoomTimer(roomId, NIGHT_DURATION, () => advanceNightTurn(roomId));
+            } else {
+                advanceNightTurn(roomId);
+            }
+        } else {
+            finishNight(roomId);
+        }
     }
 
     function finishNight(roomId) {
         const room = rooms[roomId];
         if(!room) return;
         const { killId, saveId, victimName } = room.nightActions;
+        
         if (killId && killId !== saveId) {
             const victim = io.sockets.sockets.get(killId);
-            if (victim) { victim.isAlive = false; room.aliveCount--; io.to(roomId).emit('game_event', { type: 'attack', victimId: killId, victimName: victimName }); }
+            if (victim) { 
+                victim.isAlive = false; 
+                room.aliveCount--; 
+                io.to(roomId).emit('game_event', { type: 'attack', victimId: killId, victimName: victimName }); 
+            }
+        } else if (killId && killId === saveId) {
+            io.to(roomId).emit('sys_msg', '🚑 Доктор спас жителя этой ночью!');
         }
-        room.phase = 'day'; room.activeRole = null; room.nightActions = { killId: null, saveId: null };
-        if (!checkWinCondition(roomId)) io.to(roomId).emit('change_phase', { phase: 'day' });
+
+        room.phase = 'day'; 
+        room.activeRole = null; 
+        room.nightActions = { killId: null, saveId: null };
+        
+        if (!checkWinCondition(roomId)) {
+            io.to(roomId).emit('change_phase', { phase: 'day' });
+            // Авто-завершение голосования дня по таймеру
+            setRoomTimer(roomId, DAY_DURATION, () => {
+                const r = rooms[roomId];
+                if (r && r.phase === 'day') processVotes(roomId);
+            });
+        }
     }
 
     socket.on('submit_vote', (targetId) => {
@@ -349,34 +416,59 @@ io.on('connection', (socket) => {
             room.votes[socket.id] = targetId;
             const alivePlayers = room.players.filter(pid => io.sockets.sockets.get(pid)?.isAlive);
             if (Object.keys(room.votes).length >= alivePlayers.length) { 
-                const counts = {};
-                Object.values(room.votes).forEach(vid => counts[vid] = (counts[vid] || 0) + 1);
-                const sorted = Object.keys(counts).sort((a,b) => counts[b] - counts[a]);
-                const targetSocket = io.sockets.sockets.get(sorted[0]);
-                if (targetSocket) { targetSocket.isAlive = false; room.aliveCount--; io.to(socket.roomId).emit('sys_msg', `⚖️ Казнен ${targetSocket.userData.name}.`); }
-                if (!checkWinCondition(socket.roomId)) { room.phase = 'night'; room.activeRole = 'mafia'; room.votes = {}; io.to(socket.roomId).emit('change_phase', { phase: 'night', activeRole: 'mafia' }); }
+                processVotes(socket.roomId);
             }
         }
     });
+
+    function processVotes(roomId) {
+        const room = rooms[roomId];
+        if (!room) return;
+
+        const counts = {};
+        Object.values(room.votes).forEach(vid => counts[vid] = (counts[vid] || 0) + 1);
+        
+        const sorted = Object.keys(counts).sort((a,b) => counts[b] - counts[a]);
+        
+        if (sorted.length > 0) {
+            const targetSocket = io.sockets.sockets.get(sorted[0]);
+            if (targetSocket) { 
+                targetSocket.isAlive = false; 
+                room.aliveCount--; 
+                io.to(roomId).emit('sys_msg', `⚖️ По результатам голосования казнен ${targetSocket.userData.name}.`); 
+            }
+        } else {
+            io.to(roomId).emit('sys_msg', '⚖️ Жители не смогли договориться. Никто не казнен.');
+        }
+
+        if (!checkWinCondition(roomId)) { 
+            room.phase = 'night'; 
+            room.activeRole = 'mafia'; 
+            room.votes = {}; 
+            io.to(roomId).emit('change_phase', { phase: 'night', activeRole: 'mafia' }); 
+            setRoomTimer(roomId, NIGHT_DURATION, () => finishNight(roomId));
+        }
+    }
 
     function checkWinCondition(roomId) {
         const room = rooms[roomId];
         if(!room) return true;
         const players = room.players.map(pid => io.sockets.sockets.get(pid)).filter(s => s);
-        const mafiaAlive = players.some(p => p.role === 'mafia' && p.isAlive);
-        const citizensAlive = players.some(p => p.role !== 'mafia' && p.isAlive);
+        const mafiaAlive = players.filter(p => p.role === 'mafia' && p.isAlive).length;
+        const citizensAlive = players.filter(p => p.role !== 'mafia' && p.isAlive).length;
         
         let winner = null;
-        if (!mafiaAlive) winner = 'citizens';
-        else if (!citizensAlive) winner = 'mafia';
+        if (mafiaAlive === 0) winner = 'citizens';
+        else if (mafiaAlive >= citizensAlive) winner = 'mafia';
 
         if (winner) {
+            if (room.timer) clearTimeout(room.timer);
             players.forEach(p => {
                 if (!p.userData.coins) p.userData.coins = 0;
                 if (winner === 'citizens' && p.role !== 'mafia') {
-                    p.userData.coins += 2; // Мирным +2
+                    p.userData.coins += 2; 
                 } else if (winner === 'mafia' && p.role === 'mafia') {
-                    p.userData.coins += 5; // Мафии +5
+                    p.userData.coins += 5; 
                 }
                 p.emit('user_data_updated', p.userData);
             });
@@ -389,15 +481,32 @@ io.on('connection', (socket) => {
 
     socket.on('send_msg', (msg) => {
         if (socket.roomId && socket.isAlive) {
-            io.to(socket.roomId).emit('new_msg', { user: socket.userData.name, text: msg, isVip: socket.userData.isVip, vipIcon: socket.userData.isVip ? socket.userData.vipIcon : null });
+            io.to(socket.roomId).emit('new_msg', { 
+                user: socket.userData.name, 
+                text: msg, 
+                isVip: socket.userData.isVip, 
+                vipIcon: socket.userData.isVip ? socket.userData.vipIcon : null 
+            });
         }
     });
 
     socket.on('disconnect', () => {
+        console.log(`User disconnected: ${socket.id}`);
         queue = queue.filter(s => s.id !== socket.id);
+        
+        if (socket.roomId && rooms[socket.roomId]) {
+            const room = rooms[socket.roomId];
+            // Если игрок был жив, уменьшаем счетчик и проверяем победу
+            if (socket.isAlive) {
+                socket.isAlive = false;
+                room.aliveCount--;
+                io.to(socket.roomId).emit('sys_msg', `🏃 Игрок ${socket.userData?.name || 'Неизвестный'} покинул город...`);
+                checkWinCondition(socket.roomId);
+            }
+        }
         io.emit('queue_size', queue.length);
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server on port ${PORT}`));
+server.listen(PORT, () => console.log(`[SERVER] Running on port ${PORT}`));
