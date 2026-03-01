@@ -68,8 +68,8 @@ async function handleTelegramUpdates() {
     setTimeout(handleTelegramUpdates, 1000);
 }
 
-// Функция выдачи бонуса
-function applyBonusToSocket(targetId, type, isByUserId = false) {
+// Функция выдачи бонуса (Теперь и с монетками)
+function applyBonusToSocket(targetId, type, isByUserId = false, amount = 0) {
     let targetSocket;
     
     if (isByUserId) {
@@ -79,7 +79,8 @@ function applyBonusToSocket(targetId, type, isByUserId = false) {
     }
 
     if (targetSocket && targetSocket.userData) {
-        // ДОБАВИЛ ПРОВЕРКУ НА give_vip (из твоей админки)
+        if (!targetSocket.userData.coins) targetSocket.userData.coins = 0;
+
         if (type.startsWith('vip') || type === 'give_vip') {
             targetSocket.userData.isVip = true;
             targetSocket.userData.vipIcon = "👑";
@@ -92,7 +93,12 @@ function applyBonusToSocket(targetId, type, isByUserId = false) {
             targetSocket.userData.mafiaLuck = 800;
             targetSocket.userData.luckGamesLeft = 3;
             targetSocket.emit('sys_msg', '🍀 Бонус: Шанс Мафии +80% на 3 игры.');
+        } else if (type === 'give_coins') {
+            const add = amount || 10;
+            targetSocket.userData.coins += add;
+            targetSocket.emit('sys_msg', `💰 Получено монет: ${add}`);
         }
+        
         targetSocket.emit('user_data_updated', targetSocket.userData);
         return true;
     }
@@ -122,21 +128,19 @@ function generateRoomCode() {
 io.on('connection', (socket) => {
     // --- АДМИН ПАНЕЛЬ ---
     socket.on('admin_command', (data) => {
-        // Исправлено: приведение к числу для точного сравнения
         if (Number(data.adminKey) !== Number(ADMIN_TG_ID)) {
             socket.emit('sys_msg', '🚫 Отказано в доступе: ID не совпадает');
             return;
         }
 
-        const { targetUserId, action } = data;
-        // Если action не передан, по умолчанию ставим give_vip
+        const { targetUserId, action, amount } = data;
         const finalAction = action || 'give_vip';
-        const success = applyBonusToSocket(targetUserId, finalAction, true);
+        const success = applyBonusToSocket(targetUserId, finalAction, true, amount);
 
         if (success) {
-            socket.emit('sys_msg', `✅ Успешно! Роль ${finalAction} выдана игроку ${targetUserId}`);
+            socket.emit('sys_msg', `✅ Успешно: ${finalAction} для ${targetUserId}`);
         } else {
-            socket.emit('sys_msg', `❌ Игрок ${targetUserId} не в сети или не найден`);
+            socket.emit('sys_msg', `❌ Игрок ${targetUserId} не найден`);
         }
     });
 
@@ -166,7 +170,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('create_invoice', async (data) => {
-        // БЛОКИРОВКА МАГАЗИНА НА СЕРВЕРЕ
         if (!IS_SHOP_OPEN) {
             return socket.emit('sys_msg', '🏪 Магазин временно закрыт на технические работы.');
         }
@@ -212,11 +215,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ... (остальной код игры без изменений)
     socket.on('create_room', (userData) => {
         const roomId = generateRoomCode();
         socket.userData = userData;
         if (!socket.userData.userId) socket.userData.userId = Math.floor(100000 + Math.random() * 900000);
+        if (!socket.userData.coins) socket.userData.coins = 0;
         socket.isHost = true;
         rooms[roomId] = { players: [socket.id], phase: 'lobby', isLocal: true, hostId: socket.id, nightActions: { killId: null, saveId: null }, votes: {} };
         socket.roomId = roomId;
@@ -230,6 +233,7 @@ io.on('connection', (socket) => {
         if (room && room.phase === 'lobby' && room.players.length < 12) {
             socket.userData = userData;
             if (!socket.userData.userId) socket.userData.userId = Math.floor(100000 + Math.random() * 900000);
+            if (!socket.userData.coins) socket.userData.coins = 0;
             socket.roomId = roomId;
             socket.isHost = false;
             room.players.push(socket.id);
@@ -256,6 +260,7 @@ io.on('connection', (socket) => {
     socket.on('join_queue', (userData) => {
         socket.userData = userData; 
         if (!socket.userData.userId) socket.userData.userId = Math.floor(100000 + Math.random() * 900000);
+        if (!socket.userData.coins) socket.userData.coins = 0;
         if (!queue.find(s => s.id === socket.id)) queue.push(socket);
         io.emit('queue_size', queue.length);
         if (queue.length >= 10) {
@@ -360,8 +365,25 @@ io.on('connection', (socket) => {
         const players = room.players.map(pid => io.sockets.sockets.get(pid)).filter(s => s);
         const mafiaAlive = players.some(p => p.role === 'mafia' && p.isAlive);
         const citizensAlive = players.some(p => p.role !== 'mafia' && p.isAlive);
-        if (!mafiaAlive) { io.to(roomId).emit('game_over', { winner: 'citizens' }); delete rooms[roomId]; return true; }
-        else if (!citizensAlive) { io.to(roomId).emit('game_over', { winner: 'mafia' }); delete rooms[roomId]; return true; }
+        
+        let winner = null;
+        if (!mafiaAlive) winner = 'citizens';
+        else if (!citizensAlive) winner = 'mafia';
+
+        if (winner) {
+            players.forEach(p => {
+                if (!p.userData.coins) p.userData.coins = 0;
+                if (winner === 'citizens' && p.role !== 'mafia') {
+                    p.userData.coins += 2; // Мирным +2
+                } else if (winner === 'mafia' && p.role === 'mafia') {
+                    p.userData.coins += 5; // Мафии +5
+                }
+                p.emit('user_data_updated', p.userData);
+            });
+            io.to(roomId).emit('game_over', { winner: winner });
+            delete rooms[roomId];
+            return true;
+        }
         return false;
     }
 
