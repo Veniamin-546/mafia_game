@@ -2,9 +2,9 @@ const fetch = require('node-fetch');
 const { io } = require("socket.io-client");
 
 // --- НАСТРОЙКИ (ЗАПОЛНИ ИХ) ---
-const ADMIN_BOT_TOKEN = 'ТВОЙ_ТОКЕН_НОВОГО_БОТА'; // Токен из @BotFather
+const ADMIN_BOT_TOKEN = '8120502262:AAF8ZMTCOwX9jZ63FhFJjc3Rw3T7dY3f6h0'; // Токен из @BotFather
 const ADMIN_TG_ID = 927590102; // Твой ID
-const SERVER_URL = "http://localhost:3000"; // Если деплоишь, замени на URL своего сервера (например https://mygame.render.com)
+const SERVER_URL = "https://mafia-game-skw7.onrender.com/"; // Если деплоишь, замени на URL своего сервера (например https://mygame.render.com)
 
 let stats = {
     uniqueUsers: new Set(),
