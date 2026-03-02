@@ -7,6 +7,14 @@ const BOT_TOKEN = process.env.BOT_TOKEN || '8577050382:AAHOorg_1VdNppZJYkWSqscIl
 const ADMIN_TG_ID = 927590102; 
 const IS_SHOP_OPEN = false; // ТУТ МОЖНО ВКЛЮЧИТЬ/ВЫКЛЮЧИТЬ МАГАЗИН
 
+// --- СТАТИСТИКА ДЛЯ АДМИН-БОТА ---
+let globalStats = {
+    uniqueUsers: new Set(),
+    totalRevenue: 0,
+    gamesFinished: 0,
+    startTime: Date.now()
+};
+
 // --- КОНСТАНТЫ ТАЙМЕРОВ ---
 const NIGHT_DURATION = 30000; // 30 секунд на ночь
 const DAY_DURATION = 60000;   // 60 секунд на обсуждение и голос
@@ -41,6 +49,9 @@ async function handleTelegramUpdates() {
                     const userId = update.message.from.id;
 
                     if (text === '/start') {
+                        // УЧИТЫВАЕМ НОВОГО ПОЛЬЗОВАТЕЛЯ
+                        globalStats.uniqueUsers.add(userId);
+
                         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -58,7 +69,12 @@ async function handleTelegramUpdates() {
                 }
                 
                 if (update.message && update.message.successful_payment) {
-                    const payload = update.message.successful_payment.invoice_payload;
+                    const payment = update.message.successful_payment;
+                    const payload = payment.invoice_payload;
+                    
+                    // УЧИТЫВАЕМ ВЫРУЧКУ (в XTR)
+                    globalStats.totalRevenue += (payment.total_amount || 0);
+
                     const parts = payload.split('_');
                     const type = parts.slice(1, -1).join('_');
                     const socketId = parts[parts.length - 1];
@@ -115,6 +131,21 @@ handleTelegramUpdates();
 // --- СЕРВЕР ---
 
 const server = http.createServer((req, res) => {
+    // API ДЛЯ ПИТОН-БОТА
+    if (req.url === '/admin-api/full-stats') {
+        if (req.headers['x-auth-token'] !== 'my_secret_key') {
+            res.writeHead(403);
+            return res.end('Forbidden');
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+            total_users: globalStats.uniqueUsers.size,
+            total_revenue: globalStats.totalRevenue,
+            games_played: globalStats.gamesFinished,
+            server_uptime: Math.floor((Date.now() - globalStats.startTime) / 1000)
+        }));
+    }
+
     res.writeHead(200);
     res.end('MAFIA_SUPREME_ENGINE_RUNNING');
 });
@@ -462,6 +493,9 @@ io.on('connection', (socket) => {
         else if (mafiaAlive >= citizensAlive) winner = 'mafia';
 
         if (winner) {
+            // УЧИТЫВАЕМ ЗАВЕРШЕННУЮ ИГРУ В СТАТИСТИКЕ
+            globalStats.gamesFinished++;
+
             if (room.timer) clearTimeout(room.timer);
             players.forEach(p => {
                 if (!p.userData.coins) p.userData.coins = 0;
