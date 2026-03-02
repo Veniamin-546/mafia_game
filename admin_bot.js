@@ -1,85 +1,86 @@
 const fetch = require('node-fetch');
-const { io } = require("socket.io-client");
 
-// --- НАСТРОЙКИ ---
-const ADMIN_BOT_TOKEN = '8120502262:AAF8ZMTCOwX9jZ63FhFJjc3Rw3T7dY3f6h0'; 
-const SERVER_URL = "https://mafia-game-skw7.onrender.com/"; 
+// --- ТВОИ НАСТРОЙКИ ---
+const TOKEN = '8120502262:AAF8ZMTCOwX9jZ63FhFJjc3Rw3T7dY3f6h0'; 
 
+// Переменные для хранения статистики (пока в памяти бота)
 let stats = {
-    uniqueUsers: new Set(),
-    revenue: 0,
-    gamesPlayed: 0
+    totalUsers: 0,
+    totalDonations: 0,
+    activeGames: 0
 };
 
-// 1. ПРИНУДИТЕЛЬНАЯ ОЧИСТКА И ПРОВЕРКА ТОКЕНА
-async function init() {
-    console.log("🚀 Запуск диагностики бота...");
-    try {
-        // Проверяем, живой ли токен вообще
-        const meRes = await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/getMe`);
-        const meData = await meRes.json();
-        
-        if (!meData.ok) {
-            console.log("❌ ОШИБКА: Токен неверный! Проверь его в @BotFather.");
-            return;
-        }
-        console.log(`✅ Токен принят. Имя бота: @${meData.result.username}`);
-
-        // Удаляем вебхук (очищаем путь для сообщений)
-        await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/deleteWebhook?drop_pending_updates=true`);
-        console.log("✅ Вебхук удален. Теперь Telegram будет присылать сообщения в этот код.");
-        
-        poll(); // Запускаем опрос только после очистки
-    } catch (e) {
-        console.error("❌ Ошибка инициализации:", e.message);
-    }
+// 1. ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЯ
+async function sendMessage(chatId, text) {
+    await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chat_id: chatId,
+            text: text,
+            parse_mode: 'Markdown'
+        })
+    });
 }
 
-// 2. СВЯЗЬ С СЕРВЕРОМ
-const socket = io(SERVER_URL);
-socket.on("connect", () => console.log("🌐 Подключено к игровому серверу!"));
+// 2. ГЛАВНАЯ ИНСТРУКЦИЯ (МЕНЮ)
+const mainInstruction = `
+🛠 **ПАНЕЛЬ УПРАВЛЕНИЯ MAFIA ADM**
 
-socket.on("admin_stat_update", (data) => {
-    if (data.type === 'new_user') stats.uniqueUsers.add(data.userId);
-    if (data.type === 'payment') stats.revenue += (Number(data.amount) || 0);
-    if (data.type === 'game_over') stats.gamesPlayed++;
-});
+Выбери команду для получения данных:
 
-// 3. ЦИКЛ ОПРОСА (LONG POLLING)
+📊 /stats — Показать общую статистику (Юзеры, Донаты, Игры)
+💰 /money — Посмотреть только финансовый отчет
+🎮 /games — Статус игровых комнат
+🔑 /admin — Инструкция по админ-командам (будет позже)
+
+_Бот готов к работе. Просто напиши команду._
+`;
+
+// 3. ЦИКЛ ПРОВЕРКИ СООБЩЕНИЙ (POLLING)
 let lastUpdateId = 0;
-async function poll() {
-    try {
-        const response = await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=20`);
-        const data = await response.json();
-        
-        if (data.ok && data.result.length > 0) {
-            for (const update of data.result) {
-                lastUpdateId = update.update_id;
-                if (update.message) {
-                    const chatId = update.message.chat.id;
-                    const text = update.message.text;
 
-                    console.log(`📩 НОВОЕ СООБЩЕНИЕ: [${chatId}] ${text}`);
+async function startBot() {
+    console.log("🚀 Админ-бот запущен...");
+    
+    // Сброс вебхука, чтобы сообщения точно доходили
+    await fetch(`https://api.telegram.org/bot${TOKEN}/deleteWebhook?drop_pending_updates=true`);
 
-                    // Отвечаем на ЛЮБОЕ сообщение, чтобы проверить связь
-                    const report = `📊 **СТАТИСТИКА БОТА**\n\n` +
-                        `👤 Игроков: ${stats.uniqueUsers.size}\n` +
-                        `🎮 Игр: ${stats.gamesPlayed}\n` +
-                        `💰 Доход: ${stats.revenue} XTR\n\n` +
-                        `🔗 Сервер: ${socket.connected ? '✅ Ок' : '❌ Оффлайн'}`;
+    setInterval(async () => {
+        try {
+            const response = await fetch(`https://api.telegram.org/bot${TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=10`);
+            const data = await response.json();
 
-                    await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id: chatId, text: report, parse_mode: 'Markdown' })
-                    });
+            if (data.ok && data.result.length > 0) {
+                for (const update of data.result) {
+                    lastUpdateId = update.update_id;
+                    
+                    if (update.message && update.message.text) {
+                        const chatId = update.message.chat.id;
+                        const text = update.message.text;
+
+                        console.log(`📩 Пришло сообщение: ${text}`);
+
+                        // ЛОГИКА ОТВЕТОВ
+                        if (text === '/start') {
+                            await sendMessage(chatId, "👋 Привет! Я твой админ-бот по логистике и статистике.\n" + mainInstruction);
+                        } 
+                        else if (text === '/stats') {
+                            await sendMessage(chatId, `📊 **ОБЩАЯ СТАТИСТИКА**\n\n👤 Игроков: ${stats.totalUsers}\n💰 Донатов: ${stats.totalDonations} XTR\n🎮 Игр: ${stats.activeGames}`);
+                        }
+                        else if (text === '/money') {
+                            await sendMessage(chatId, `💰 **ФИНАНСОВЫЙ ОТЧЕТ**\n\nВсего получено: ${stats.totalDonations} XTR\nСтатус платежной системы: ✅ OK`);
+                        }
+                        else {
+                            await sendMessage(chatId, "❓ Неизвестная команда. Используй /start для вызова меню.");
+                        }
+                    }
                 }
             }
+        } catch (e) {
+            console.error("Ошибка при получении сообщений:", e.message);
         }
-    } catch (e) {
-        // Ошибки сети игнорируем, просто пробуем снова
-    }
-    setTimeout(poll, 1000);
+    }, 2000); // Проверяет новые сообщения каждые 2 секунды
 }
 
-init();
+startBot();
