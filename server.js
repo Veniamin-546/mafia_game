@@ -133,7 +133,7 @@ handleTelegramUpdates();
 const server = http.createServer((req, res) => {
     // API ДЛЯ ПИТОН-БОТА
     if (req.url === '/admin-api/full-stats') {
-        if (req.headers['x-auth-token'] !== 'my_secret_key') {
+        if (req.headers['x-auth-token'] !== '9738411') {
             res.writeHead(403);
             return res.end('Forbidden');
         }
