@@ -1,10 +1,10 @@
 const fetch = require('node-fetch');
 const { io } = require("socket.io-client");
 
-// --- НАСТРОЙКИ (ЗАПОЛНИ ИХ) ---
-const ADMIN_BOT_TOKEN = '8120502262:AAF8ZMTCOwX9jZ63FhFJjc3Rw3T7dY3f6h0'; // Твой Токен
-const ADMIN_TG_ID = 927590102; // Твой ID
-const SERVER_URL = "https://mafia-game-skw7.onrender.com/"; // URL сервера
+// --- НАСТРОЙКИ ---
+const ADMIN_BOT_TOKEN = '8120502262:AAF8ZMTCOwX9jZ63FhFJjc3Rw3T7dY3f6h0'; 
+const ADMIN_TG_ID = 927590102; 
+const SERVER_URL = "https://mafia-game-skw7.onrender.com/"; 
 
 let stats = {
     uniqueUsers: new Set(),
@@ -13,37 +13,42 @@ let stats = {
     history: []
 };
 
-// Подключение к основному движку
+// Функция принудительного сброса Webhook (ЧТОБЫ БОТ НАЧАЛ ОТВЕЧАТЬ)
+async function resetWebhook() {
+    try {
+        await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/deleteWebhook?drop_pending_updates=true`);
+        console.log("✅ Webhook сброшен. Бот теперь должен видеть сообщения.");
+    } catch (e) { console.error("Ошибка сброса:", e); }
+}
+
 const socket = io(SERVER_URL);
 
 socket.on("connect", () => {
     console.log("✅ Бот статистики подключен к серверу Mafia Supreme");
-    sendAdminMsg("🚀 **Бот статистики запущен и подключен к движку!**\nНапиши /stats для проверки.");
+    sendAdminMsg("🚀 **Бот статистики онлайн!**\nСвязь с сервером установлена.\nНапиши /stats");
 });
 
-// Слушаем обновления от сервера
 socket.on("admin_stat_update", (data) => {
     if (data.type === 'new_user') {
         stats.uniqueUsers.add(data.userId);
-        addLog(`👤 Новый юзер: ${data.name || 'Аноним'}`);
+        addLog(`👤 Новый игрок: ${data.name || 'ID ' + data.userId}`);
     }
     if (data.type === 'payment') {
         const amount = parseInt(data.amount) || 0;
         stats.revenue += amount;
-        sendAdminMsg(`💰 **Дзинь! Новый донат:**\n+${amount} XTR от ${data.name}\nТовар: ${data.item}`);
+        sendAdminMsg(`💰 **ДОНАТ:** +${amount} XTR от ${data.name}\nТовар: ${data.item}`);
         addLog(`💎 Донат: +${amount} XTR (${data.item})`);
     }
     if (data.type === 'game_over') {
         stats.gamesPlayed++;
-        addLog(`🎭 Игра завершена: Победили ${data.winner}`);
+        addLog(`🎭 Игра окончена. Победили: ${data.winner}`);
     }
 });
 
-// Вспомогательная функция для истории
 function addLog(msg) {
     const time = new Date().toLocaleTimeString('ru-RU');
     stats.history.push(`[${time}] ${msg}`);
-    if (stats.history.length > 10) stats.history.shift(); // Увеличил до 10 для удобства
+    if (stats.history.length > 10) stats.history.shift();
 }
 
 async function sendAdminMsg(text) {
@@ -53,15 +58,15 @@ async function sendAdminMsg(text) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: ADMIN_TG_ID, text: text, parse_mode: 'Markdown' })
         });
-    } catch (e) { console.error("Ошибка отправки админу:", e); }
+    } catch (e) {}
 }
 
-// Команды в Телеграм
 let lastUpdateId = 0;
 async function poll() {
     try {
         const response = await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=10`);
         const data = await response.json();
+        
         if (data.ok && data.result) {
             for (const update of data.result) {
                 lastUpdateId = update.update_id;
@@ -69,21 +74,13 @@ async function poll() {
                     const text = update.message.text;
 
                     if (text === '/start' || text === '/stats') {
-                        const report = `📊 **СТАТИСТИКА MAFIA SUPREME**\n\n` +
-                            `👥 Всего игроков: ${stats.uniqueUsers.size}\n` +
-                            `🎮 Сыграно партий: ${stats.gamesPlayed}\n` +
-                            `💰 Общая выручка: ${stats.revenue} XTR\n\n` +
-                            `📜 **ПОСЛЕДНИЕ СОБЫТИЯ:**\n${stats.history.join('\n') || 'Пока нет событий'}\n\n` +
-                            `🚀 Статус связи: ${socket.connected ? '✅ Подключен' : '❌ Нет связи с сервером'}`;
+                        const report = `📊 **МАФИЯ: СТАТИСТИКА**\n\n` +
+                            `👥 Игроков: ${stats.uniqueUsers.size}\n` +
+                            `🎮 Игр: ${stats.gamesPlayed}\n` +
+                            `💰 Доход: ${stats.revenue} XTR\n\n` +
+                            `🌐 Сервер: ${socket.connected ? '✅ ОНЛАЙН' : '❌ ОФФЛАЙН'}\n\n` +
+                            `📜 **ЛОГИ:**\n${stats.history.join('\n') || 'Нет данных'}`;
                         sendAdminMsg(report);
-                    }
-
-                    // ДОБАВИЛ ТЕСТОВУЮ КОМАНДУ, ЧТОБЫ ТЫ МОГ ПРОВЕРИТЬ БОТА
-                    if (text === '/test') {
-                        stats.uniqueUsers.add(12345);
-                        stats.revenue += 50;
-                        addLog("Тестовое событие добавлено");
-                        sendAdminMsg("✅ Тест пройден! Я работаю. Теперь жду данные от основного сервера.");
                     }
                 }
             }
@@ -91,4 +88,6 @@ async function poll() {
     } catch (e) {}
     setTimeout(poll, 1500);
 }
-poll();
+
+// ЗАПУСК
+resetWebhook().then(() => poll());
