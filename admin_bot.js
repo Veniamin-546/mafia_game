@@ -1,8 +1,8 @@
 const fetch = require('node-fetch');
 const { io } = require("socket.io-client");
 
+// --- НАСТРОЙКИ ---
 const ADMIN_BOT_TOKEN = '8120502262:AAF8ZMTCOwX9jZ63FhFJjc3Rw3T7dY3f6h0'; 
-const ADMIN_TG_ID = 927590102; 
 const SERVER_URL = "https://mafia-game-skw7.onrender.com/"; 
 
 let stats = {
@@ -12,83 +12,82 @@ let stats = {
     history: []
 };
 
-// 1. ОЧИСТКА WEBHOOK (КРИТИЧЕСКИ ВАЖНО)
+// 1. ОЧИСТКА WEBHOOK И ЗАПУСК
 async function setupBot() {
-    console.log("--- ЗАПУСК АДМИН-БОТА ---");
+    console.log("--- СИСТЕМА МОНИТОРИНГА ЗАПУЩЕНА ---");
     try {
-        // Удаляем вебхук, чтобы работал long polling (getUpdates)
         const res = await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/deleteWebhook?drop_pending_updates=true`);
         const data = await res.json();
-        console.log("Статус сброса Telegram:", data.description);
-        
-        // Тестовое сообщение самому себе в консоль
-        console.log("Ожидаю сообщений от ID:", ADMIN_TG_ID);
+        console.log("Статус связи с TG:", data.ok ? "✅ ОК" : "❌ Ошибка");
+        console.log("Ожидаю сообщений в Telegram...");
     } catch (e) {
-        console.error("Ошибка при настройке:", e);
+        console.error("Ошибка сети при запуске:", e.message);
     }
 }
 
-// 2. СВЯЗЬ С СЕРВЕРОМ
+// 2. СВЯЗЬ С ИГРОВЫМ СЕРВЕРОМ
 const socket = io(SERVER_URL);
 socket.on("connect", () => {
-    console.log("✅ Соединение с игровым сервером установлено!");
+    console.log("✅ Соединение с Mafia Server: УСТАНОВЛЕНО");
+});
+socket.on("connect_error", (err) => {
+    console.log("❌ Ошибка подключения к серверу:", err.message);
 });
 
 socket.on("admin_stat_update", (data) => {
+    console.log("📩 Получены данные от сервера:", data);
     if (data.type === 'new_user') stats.uniqueUsers.add(data.userId);
-    if (data.type === 'payment') {
-        stats.revenue += (parseInt(data.amount) || 0);
-        sendAdminMsg(`💰 ДОНАТ: +${data.amount} XTR от ${data.name}`);
-    }
+    if (data.type === 'payment') stats.revenue += (parseInt(data.amount) || 0);
     if (data.type === 'game_over') stats.gamesPlayed++;
 });
 
-// 3. ОТПРАВКА СООБЩЕНИЙ
-async function sendAdminMsg(text) {
+// 3. ФУНКЦИЯ ОТВЕТА
+async function sendReply(chatId, text) {
     try {
         await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: ADMIN_TG_ID, text: text, parse_mode: 'Markdown' })
+            body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'Markdown' })
         });
-    } catch (e) { console.log("Ошибка отправки сообщения в TG"); }
+        console.log(`✅ Ответ отправлен в чат: ${chatId}`);
+    } catch (e) {
+        console.log("❌ Не удалось отправить сообщение в TG");
+    }
 }
 
-// 4. ПРОВЕРКА КОМАНД (POLLING)
+// 4. ГЛАВНЫЙ ЦИКЛ (ОПРОС ТЕЛЕГРАМА)
 let lastUpdateId = 0;
 async function poll() {
     try {
-        const response = await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=20`);
+        const response = await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=10`);
         const data = await response.json();
         
-        if (data.ok && data.result.length > 0) {
+        if (data.ok && data.result && data.result.length > 0) {
             for (const update of data.result) {
                 lastUpdateId = update.update_id;
                 
                 if (update.message) {
-                    const fromId = update.message.from.id;
+                    const chatId = update.message.chat.id;
                     const text = update.message.text;
 
-                    console.log(`Получено сообщение от ${fromId}: ${text}`);
+                    // ВЫВОД В КОНСОЛЬ ДЛЯ ПРОВЕРКИ
+                    console.log(`🔔 СООБЩЕНИЕ ИЗ TG: "${text}" от чата ${chatId}`);
 
-                    if (fromId === ADMIN_TG_ID) {
-                        if (text === '/start' || text === '/stats') {
-                            const report = `📊 **МАФИЯ: СТАТИСТИКА**\n\n` +
-                                `👥 Игроков: ${stats.uniqueUsers.size}\n` +
-                                `🎮 Игр: ${stats.gamesPlayed}\n` +
-                                `💰 Доход: ${stats.revenue} XTR\n\n` +
-                                `🌐 Сервер: ${socket.connected ? '✅ ОНЛАЙН' : '❌ ОФФЛАЙН'}`;
-                            await sendAdminMsg(report);
-                        }
-                    } else {
-                        console.log("⚠️ Сообщение проигнорировано (не ваш ID)");
+                    if (text === '/start' || text === '/stats') {
+                        const report = `📊 **ОТЧЕТ ДЛЯ АДМИНА**\n\n` +
+                            `👥 Игроков: ${stats.uniqueUsers.size}\n` +
+                            `🎮 Игр: ${stats.gamesPlayed}\n` +
+                            `💰 Доход: ${stats.revenue} XTR\n\n` +
+                            `🌐 Сервер: ${socket.connected ? '✅ ОНЛАЙН' : '❌ ОФФЛАЙН'}`;
+                        await sendReply(chatId, report);
                     }
                 }
             }
         }
-    } catch (e) { console.log("Ошибка сети в poll"); }
+    } catch (e) {
+        console.log("... поиск обновлений ...");
+    }
     setTimeout(poll, 1000);
 }
 
-// ЗАПУСК ВСЕГО
 setupBot().then(() => poll());
