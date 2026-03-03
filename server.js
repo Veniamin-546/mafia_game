@@ -1,19 +1,40 @@
 const http = require('http');
 const { Server } = require('socket.io');
 const fetch = require('node-fetch');
+const fs = require('fs'); // Добавлено для сохранения
 
 // --- НАСТРОЙКИ БОТА ---
 const BOT_TOKEN = process.env.BOT_TOKEN || '8577050382:AAHOorg_1VdNppZJYkWSqscIl8d1GVeZkbM'; 
 const ADMIN_TG_ID = 927590102; 
 const IS_SHOP_OPEN = false; // ТУТ МОЖНО ВКЛЮЧИТЬ/ВЫКЛЮЧИТЬ МАГАЗИН
 
-// --- СТАТИСТИКА ДЛЯ АДМИН-БОТА ---
+// --- СТАТИСТИКА ДЛЯ АДМИН-БОТА (С СОХРАНЕНИЕМ) ---
+const statsFilePath = './stats.json';
 let globalStats = {
-    uniqueUsers: new Set(),
+    uniqueUsers: [], // Изменено на массив для корректного JSON
     totalRevenue: 0,
     gamesFinished: 0,
     startTime: Date.now()
 };
+
+// Загрузка данных при старте сервера
+if (fs.existsSync(statsFilePath)) {
+    try {
+        const saved = JSON.parse(fs.readFileSync(statsFilePath, 'utf8'));
+        globalStats.uniqueUsers = saved.uniqueUsers || [];
+        globalStats.totalRevenue = saved.totalRevenue || 0;
+        globalStats.gamesFinished = saved.gamesFinished || 0;
+    } catch (e) { console.log("Ошибка чтения файла статистики"); }
+}
+
+// Функция записи в файл
+function saveStats() {
+    fs.writeFileSync(statsFilePath, JSON.stringify({
+        uniqueUsers: globalStats.uniqueUsers,
+        totalRevenue: globalStats.totalRevenue,
+        gamesFinished: globalStats.gamesFinished
+    }, null, 2));
+}
 
 // --- КОНСТАНТЫ ТАЙМЕРОВ ---
 const NIGHT_DURATION = 30000; // 30 секунд на ночь
@@ -49,8 +70,11 @@ async function handleTelegramUpdates() {
                     const userId = update.message.from.id;
 
                     if (text === '/start') {
-                        // УЧИТЫВАЕМ НОВОГО ПОЛЬЗОВАТЕЛЯ
-                        globalStats.uniqueUsers.add(userId);
+                        // УЧИТЫВАЕМ НОВОГО ПОЛЬЗОВАТЕЛЯ И СОХРАНЯЕМ
+                        if (!globalStats.uniqueUsers.includes(userId)) {
+                            globalStats.uniqueUsers.push(userId);
+                            saveStats();
+                        }
 
                         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                             method: 'POST',
@@ -72,8 +96,9 @@ async function handleTelegramUpdates() {
                     const payment = update.message.successful_payment;
                     const payload = payment.invoice_payload;
                     
-                    // УЧИТЫВАЕМ ВЫРУЧКУ (в XTR)
+                    // УЧИТЫВАЕМ ВЫРУЧКУ И СОХРАНЯЕМ
                     globalStats.totalRevenue += (payment.total_amount || 0);
+                    saveStats();
 
                     const parts = payload.split('_');
                     const type = parts.slice(1, -1).join('_');
@@ -139,7 +164,7 @@ const server = http.createServer((req, res) => {
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
-            total_users: globalStats.uniqueUsers.size,
+            total_users: globalStats.uniqueUsers.length, // .length вместо .size
             total_revenue: globalStats.totalRevenue,
             games_played: globalStats.gamesFinished,
             server_uptime: Math.floor((Date.now() - globalStats.startTime) / 1000)
@@ -370,7 +395,6 @@ io.on('connection', (socket) => {
             });
         });
 
-        // Запуск авто-таймера ночи
         setRoomTimer(roomId, NIGHT_DURATION, () => finishNight(roomId));
     }
 
@@ -401,7 +425,6 @@ io.on('connection', (socket) => {
             const nextPlayer = room.players.map(pid => io.sockets.sockets.get(pid)).find(s => s && s.role === room.activeRole && s.isAlive);
             if (nextPlayer) {
                 io.to(roomId).emit('change_phase', { phase: 'night', activeRole: room.activeRole });
-                // Сбрасываем и обновляем таймер для следующей роли
                 setRoomTimer(roomId, NIGHT_DURATION, () => advanceNightTurn(roomId));
             } else {
                 advanceNightTurn(roomId);
@@ -433,7 +456,6 @@ io.on('connection', (socket) => {
         
         if (!checkWinCondition(roomId)) {
             io.to(roomId).emit('change_phase', { phase: 'day' });
-            // Авто-завершение голосования дня по таймеру
             setRoomTimer(roomId, DAY_DURATION, () => {
                 const r = rooms[roomId];
                 if (r && r.phase === 'day') processVotes(roomId);
@@ -458,7 +480,6 @@ io.on('connection', (socket) => {
 
         const counts = {};
         Object.values(room.votes).forEach(vid => counts[vid] = (counts[vid] || 0) + 1);
-        
         const sorted = Object.keys(counts).sort((a,b) => counts[b] - counts[a]);
         
         if (sorted.length > 0) {
@@ -493,8 +514,9 @@ io.on('connection', (socket) => {
         else if (mafiaAlive >= citizensAlive) winner = 'mafia';
 
         if (winner) {
-            // УЧИТЫВАЕМ ЗАВЕРШЕННУЮ ИГРУ В СТАТИСТИКЕ
+            // СОХРАНЯЕМ СТАТИСТИКУ ИГРЫ В ФАЙЛ
             globalStats.gamesFinished++;
+            saveStats();
 
             if (room.timer) clearTimeout(room.timer);
             players.forEach(p => {
@@ -525,12 +547,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
         queue = queue.filter(s => s.id !== socket.id);
-        
         if (socket.roomId && rooms[socket.roomId]) {
             const room = rooms[socket.roomId];
-            // Если игрок был жив, уменьшаем счетчик и проверяем победу
             if (socket.isAlive) {
                 socket.isAlive = false;
                 room.aliveCount--;
