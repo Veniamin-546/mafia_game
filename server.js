@@ -17,23 +17,33 @@ let globalStats = {
     startTime: Date.now()
 };
 
-// Загрузка данных при старте сервера
+// Загрузка данных при старте сервера (Исправлено)
 if (fs.existsSync(statsFilePath)) {
     try {
-        const saved = JSON.parse(fs.readFileSync(statsFilePath, 'utf8'));
-        globalStats.uniqueUsers = saved.uniqueUsers || [];
-        globalStats.totalRevenue = saved.totalRevenue || 0;
-        globalStats.gamesFinished = saved.gamesFinished || 0;
-    } catch (e) { console.log("Ошибка чтения файла статистики"); }
+        const fileContent = fs.readFileSync(statsFilePath, 'utf8');
+        if (fileContent) {
+            const saved = JSON.parse(fileContent);
+            globalStats.uniqueUsers = Array.isArray(saved.uniqueUsers) ? saved.uniqueUsers : [];
+            globalStats.totalRevenue = saved.totalRevenue || 0;
+            globalStats.gamesFinished = saved.gamesFinished || 0;
+            console.log(`[STATS] Загружено юзеров: ${globalStats.uniqueUsers.length}`);
+        }
+    } catch (e) { 
+        console.log("Ошибка чтения файла статистики, используем пустые значения"); 
+    }
 }
 
 // Функция записи в файл
 function saveStats() {
-    fs.writeFileSync(statsFilePath, JSON.stringify({
-        uniqueUsers: globalStats.uniqueUsers,
-        totalRevenue: globalStats.totalRevenue,
-        gamesFinished: globalStats.gamesFinished
-    }, null, 2));
+    try {
+        fs.writeFileSync(statsFilePath, JSON.stringify({
+            uniqueUsers: globalStats.uniqueUsers,
+            totalRevenue: globalStats.totalRevenue,
+            gamesFinished: globalStats.gamesFinished
+        }, null, 2));
+    } catch (e) {
+        console.error("Ошибка записи файла статистики:", e);
+    }
 }
 
 // --- КОНСТАНТЫ ТАЙМЕРОВ ---
@@ -67,7 +77,7 @@ async function handleTelegramUpdates() {
                     const chatId = update.message.chat.id;
                     const text = update.message.text;
                     const firstName = update.message.from.first_name;
-                    const userId = update.message.from.id;
+                    const userId = Number(update.message.from.id); // Принудительно число для сравнения
 
                     if (text === '/start') {
                         // УЧИТЫВАЕМ НОВОГО ПОЛЬЗОВАТЕЛЯ И СОХРАНЯЕМ
