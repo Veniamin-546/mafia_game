@@ -21,7 +21,7 @@ let globalStats = {
 if (fs.existsSync(statsFilePath)) {
     try {
         const fileContent = fs.readFileSync(statsFilePath, 'utf8');
-        if (fileContent) {
+        if (fileContent && fileContent.trim().length > 0) {
             const saved = JSON.parse(fileContent);
             globalStats.uniqueUsers = Array.isArray(saved.uniqueUsers) ? saved.uniqueUsers : [];
             globalStats.totalRevenue = saved.totalRevenue || 0;
