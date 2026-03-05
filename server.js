@@ -17,6 +17,20 @@ let globalStats = {
     startTime: Date.now()
 };
 
+// --- ФУНКЦИЯ ЗАПИСИ (ВЫНЕСЕНА ВВЕРХ ДЛЯ ДОСТУПА) ---
+function saveStats() {
+    try {
+        fs.writeFileSync(statsFilePath, JSON.stringify({
+            uniqueUsers: globalStats.uniqueUsers,
+            totalRevenue: globalStats.totalRevenue,
+            gamesFinished: globalStats.gamesFinished
+        }, null, 2));
+        console.log(`[STATS] Данные успешно сохранены в файл. Юзеров: ${globalStats.uniqueUsers.length}`);
+    } catch (e) {
+        console.error("Ошибка записи файла статистики:", e);
+    }
+}
+
 // Загрузка данных при старте сервера (Исправлено)
 if (fs.existsSync(statsFilePath)) {
     try {
@@ -31,19 +45,9 @@ if (fs.existsSync(statsFilePath)) {
     } catch (e) { 
         console.log("Ошибка чтения файла статистики, используем пустые значения"); 
     }
-}
-
-// Функция записи в файл
-function saveStats() {
-    try {
-        fs.writeFileSync(statsFilePath, JSON.stringify({
-            uniqueUsers: globalStats.uniqueUsers,
-            totalRevenue: globalStats.totalRevenue,
-            gamesFinished: globalStats.gamesFinished
-        }, null, 2));
-    } catch (e) {
-        console.error("Ошибка записи файла статистики:", e);
-    }
+} else {
+    // Если файла нет, создаем его сразу
+    saveStats();
 }
 
 // --- КОНСТАНТЫ ТАЙМЕРОВ ---
@@ -83,7 +87,8 @@ async function handleTelegramUpdates() {
                         // УЧИТЫВАЕМ НОВОГО ПОЛЬЗОВАТЕЛЯ И СОХРАНЯЕМ
                         if (!globalStats.uniqueUsers.includes(userId)) {
                             globalStats.uniqueUsers.push(userId);
-                            saveStats();
+                            console.log(`[DEBUG] Добавлен новый пользователь: ${userId}`);
+                            saveStats(); // Мгновенное сохранение
                         }
 
                         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
